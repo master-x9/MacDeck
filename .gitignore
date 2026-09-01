@@ -1,0 +1,16 @@
+.DS_Store
+*.xcuserstate
+*.xcbkptlist
+xcuserdata/
+build/
+DerivedData/
+module-cache/
+*.zip
+*.docx
+*.docx.json
+build_output.txt
+base64_icons.txt
+temp_prompt.html
+scratch_generate_base64.swift
+main
+test_*.swift
