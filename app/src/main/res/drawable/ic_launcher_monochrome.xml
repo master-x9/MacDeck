@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- MacBook Screen Outer Bezel -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M30,30 L78,30 A4,4 0 0,1 82,34 L82,65 A4,4 0 0,1 78,69 L30,69 A4,4 0 0,1 26,65 L26,34 A4,4 0 0,1 30,30 Z M32,33 L32,66 L76,66 L76,33 Z" />
+
+    <!-- 4 Tiles inside screen -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M35,36 L49,36 A2,2 0 0,1 51,38 L51,47 A2,2 0 0,1 49,49 L35,49 A2,2 0 0,1 33,47 L33,38 A2,2 0 0,1 35,36 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M59,36 L73,36 A2,2 0 0,1 75,38 L75,47 A2,2 0 0,1 73,49 L59,49 A2,2 0 0,1 57,47 L57,38 A2,2 0 0,1 59,36 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M35,51 L49,51 A2,2 0 0,1 51,53 L51,62 A2,2 0 0,1 49,64 L35,64 A2,2 0 0,1 33,62 L33,53 A2,2 0 0,1 35,51 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M59,51 L73,51 A2,2 0 0,1 75,53 L75,62 A2,2 0 0,1 73,64 L59,64 A2,2 0 0,1 57,62 L57,53 A2,2 0 0,1 59,51 Z" />
+
+    <!-- MacBook Base Deck -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M22,70 L86,70 A2,2 0 0,1 88,72 L88,74 A2,2 0 0,1 86,76 L22,76 A2,2 0 0,1 20,74 L20,72 A2,2 0 0,1 22,70 Z" />
+
+</vector>

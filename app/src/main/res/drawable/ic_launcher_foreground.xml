@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- MacBook Screen Lid Outer Bezel (Silver) -->
+    <path
+        android:pathData="M30,30 L78,30 A4,4 0 0,1 82,34 L82,65 A4,4 0 0,1 78,69 L30,69 A4,4 0 0,1 26,65 L26,34 A4,4 0 0,1 30,30 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="54"
+                android:startY="30"
+                android:endX="54"
+                android:endY="69"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FFF8F9FB" />
+                <item android:offset="1.0" android:color="#FFDCE0E7" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- OLED Screen Interior -->
+    <path
+        android:pathData="M31.5,32 L76.5,32 A2.5,2.5 0 0,1 79,34.5 L79,64.5 A2.5,2.5 0 0,1 76.5,67 L31.5,67 A2.5,2.5 0 0,1 29,64.5 L29,34.5 A2.5,2.5 0 0,1 31.5,32 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="54"
+                android:startY="32"
+                android:endX="54"
+                android:endY="67"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FF14151A" />
+                <item android:offset="1.0" android:color="#FF0C0D10" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Deck Tile 1: Top-Left (Blue #0A84FF) -->
+    <path
+        android:fillColor="#0A84FF"
+        android:pathData="M35,36 L49,36 A2.5,2.5 0 0,1 51.5,38.5 L51.5,46.5 A2.5,2.5 0 0,1 49,49 L35,49 A2.5,2.5 0 0,1 32.5,46.5 L32.5,38.5 A2.5,2.5 0 0,1 35,36 Z" />
+
+    <!-- Deck Tile 2: Top-Right (Green #30D158) -->
+    <path
+        android:fillColor="#30D158"
+        android:pathData="M59,36 L73,36 A2.5,2.5 0 0,1 75.5,38.5 L75.5,46.5 A2.5,2.5 0 0,1 73,49 L59,49 A2.5,2.5 0 0,1 56.5,46.5 L56.5,38.5 A2.5,2.5 0 0,1 59,36 Z" />
+
+    <!-- Deck Tile 3: Bottom-Left (Orange #FF9F0A) -->
+    <path
+        android:fillColor="#FF9F0A"
+        android:pathData="M35,51 L49,51 A2.5,2.5 0 0,1 51.5,53.5 L51.5,61.5 A2.5,2.5 0 0,1 49,64 L35,64 A2.5,2.5 0 0,1 32.5,61.5 L32.5,53.5 A2.5,2.5 0 0,1 35,51 Z" />
+
+    <!-- Deck Tile 4: Bottom-Right (Red #FF453A) -->
+    <path
+        android:fillColor="#FF453A"
+        android:pathData="M59,51 L73,51 A2.5,2.5 0 0,1 75.5,53.5 L75.5,61.5 A2.5,2.5 0 0,1 73,64 L59,64 A2.5,2.5 0 0,1 56.5,61.5 L56.5,53.5 A2.5,2.5 0 0,1 59,51 Z" />
+
+    <!-- MacBook Base Deck (Silver aluminum) -->
+    <path
+        android:pathData="M22,70 L86,70 A2,2 0 0,1 88,72 L88,74 A2,2 0 0,1 86,76 L22,76 A2,2 0 0,1 20,74 L20,72 A2,2 0 0,1 22,70 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="54"
+                android:startY="70"
+                android:endX="54"
+                android:endY="76"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#FFF8F9FB" />
+                <item android:offset="1.0" android:color="#FFD6DAE2" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Center Thumb Notch -->
+    <path
+        android:fillColor="#14151A"
+        android:pathData="M49,70 L59,70 A0,0 0 0,1 59,70 L59,71.5 A1.5,1.5 0 0,1 57.5,73 L50.5,73 A1.5,1.5 0 0,1 49,71.5 Z" />
+
+</vector>
