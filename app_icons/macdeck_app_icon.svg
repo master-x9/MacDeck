@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#191920" />
+      <stop offset="100%" stop-color="#0b0b0e" />
+    </linearGradient>
+    
+    <!-- Screen Gradient -->
+    <linearGradient id="screenGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#14151a" />
+      <stop offset="100%" stop-color="#0c0d10" />
+    </linearGradient>
+
+    <!-- Aluminum Bezel Gradient -->
+    <linearGradient id="aluminumGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#e1e2e8" />
+    </linearGradient>
+
+    <!-- Drop Shadow Filter -->
+    <filter id="appShadow" x="-10%" y="-10%" width="120%" height="125%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="24" stdDeviation="28" flood-color="#000000" flood-opacity="0.65" />
+    </filter>
+    
+    <filter id="laptopShadow" x="-10%" y="-10%" width="120%" height="125%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="16" stdDeviation="16" flood-color="#000000" flood-opacity="0.45" />
+    </filter>
+  </defs>
+
+  <!-- Squircle App Icon Background -->
+  <rect x="92" y="92" width="840" height="840" rx="230" fill="url(#bgGrad)" filter="url(#appShadow)" stroke="rgba(255,255,255,0.12)" stroke-width="2.5" />
+
+  <!-- MacBook Group -->
+  <g filter="url(#laptopShadow)">
+    <!-- MacBook Screen Lid -->
+    <rect x="215" y="250" width="594" height="420" rx="42" fill="url(#aluminumGrad)" />
+    
+    <!-- OLED Screen Interior -->
+    <rect x="240" y="275" width="544" height="370" rx="28" fill="url(#screenGrad)" />
+
+    <!-- 4 Colored Stream Deck Tiles -->
+    <!-- Top-Left: Blue -->
+    <rect x="300" y="325" width="200" height="120" rx="30" fill="#0A84FF" />
+    <!-- Top-Right: Green -->
+    <rect x="524" y="325" width="200" height="120" rx="30" fill="#30D158" />
+    <!-- Bottom-Left: Orange -->
+    <rect x="300" y="475" width="200" height="120" rx="30" fill="#FF9F0A" />
+    <!-- Bottom-Right: Red -->
+    <rect x="524" y="475" width="200" height="120" rx="30" fill="#FF453A" />
+
+    <!-- MacBook Base Deck -->
+    <path d="M153 686 C153 670 166 657 182 657 H430 C436 657 442 662 445 668 L449 676 C453 684 461 689 470 689 H554 C563 689 571 684 575 676 L579 668 C582 662 588 657 594 657 H842 C858 657 871 670 871 686 V694 C871 712 856 726 838 726 H186 C168 726 153 712 153 694 Z" fill="url(#aluminumGrad)" />
+  </g>
+</svg>

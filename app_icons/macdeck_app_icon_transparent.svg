@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="screenGradT" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#14151a" />
+      <stop offset="100%" stop-color="#0c0d10" />
+    </linearGradient>
+    <linearGradient id="aluminumGradT" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#e1e2e8" />
+    </linearGradient>
+    <filter id="laptopShadowT" x="-10%" y="-10%" width="120%" height="125%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="16" stdDeviation="16" flood-color="#000000" flood-opacity="0.45" />
+    </filter>
+  </defs>
+
+  <g filter="url(#laptopShadowT)">
+    <rect x="215" y="250" width="594" height="420" rx="42" fill="url(#aluminumGradT)" />
+    <rect x="240" y="275" width="544" height="370" rx="28" fill="url(#screenGradT)" />
+    <rect x="300" y="325" width="200" height="120" rx="30" fill="#0A84FF" />
+    <rect x="524" y="325" width="200" height="120" rx="30" fill="#30D158" />
+    <rect x="300" y="475" width="200" height="120" rx="30" fill="#FF9F0A" />
+    <rect x="524" y="475" width="200" height="120" rx="30" fill="#FF453A" />
+    <path d="M153 686 C153 670 166 657 182 657 H430 C436 657 442 662 445 668 L449 676 C453 684 461 689 470 689 H554 C563 689 571 684 575 676 L579 668 C582 662 588 657 594 657 H842 C858 657 871 670 871 686 V694 C871 712 856 726 838 726 H186 C168 726 153 712 153 694 Z" fill="url(#aluminumGradT)" />
+  </g>
+</svg>

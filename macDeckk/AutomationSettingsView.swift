@@ -31,6 +31,7 @@ struct AutomationSettingsView: View {
                 Text("OBS & Discord")
                     .font(.headline)
                 Spacer()
+                
                 Button("Done") { dismiss() }
                     .keyboardShortcut(.defaultAction)
             }

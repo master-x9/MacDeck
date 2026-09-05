@@ -1,0 +1,6 @@
+# WinDeck Dependencies
+zeroconf>=0.130.0
+websockets>=12.0
+pywebview>=5.0
+pystray>=0.19.5
+Pillow>=10.0.0

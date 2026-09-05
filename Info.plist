@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDisplayName</key>
+    <string>MacDeck</string>
+    <key>CFBundleName</key>
+    <string>MacDeck</string>
+    <!-- Local network permission prompt string.
+         Without this key the system will not show the local-network
+         permission dialog, and Bonjour advertising silently fails. -->
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>MacDeck needs local network access to discover and connect to your phone over Wi-Fi so it can receive deck tile commands.</string>
+
+    <!-- Bonjour service types this app advertises / browses.
+         Must include the _macdeck._tcp service type used by
+         DeckNetworkManager's NWListener.Service. -->
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_macdeck._tcp</string>
+    </array>
+
+    <!-- AppleEvents permission prompt string.
+         Required to use NSAppleScript to control System Events
+         for reliable global hotkey injection. -->
+    <key>NSAppleEventsUsageDescription</key>
+    <string>MacDeck requires permission to control System Events in order to simulate global keyboard shortcuts.</string>
+</dict>
+</plist>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- App Sandbox is DISABLED via ENABLE_APP_SANDBOX=NO in build settings.
+         CGEvent.post(tap:) for media/brightness key injection is silently
+         blocked inside the sandbox, even when Accessibility is granted.
+         Stream Deck–style apps must run unsandboxed. -->
+
+    <!-- Incoming Connections (Server): required for NWListener on port 62233.
+         Without this the listener silently fails inside the sandbox. -->
+    <key>com.apple.security.network.server</key>
+    <true/>
+
+    <!-- Outgoing Connections (Client): required for WebsiteIconLoader to fetch favicons -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+
+    <!-- Apple Events: required to run AppleScript to control System Events 
+         when Hardened Runtime or App Sandbox is enabled. -->
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
+</dict>
+</plist>
