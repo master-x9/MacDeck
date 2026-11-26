@@ -21,7 +21,7 @@ The **Windows host**, WinDeck, adds custom hotkey tiles and Windows actions such
 
 ## Set up the desktop host
 
-You’ll need the MacDeck companion app on your phone for pairing. This repository provides the two desktop hosts. Choose the setup for the computer you want to control.
+This repository includes the macOS host, the [WinDeck host](windows/), and the [Android companion](android/). First run the host for the computer you want to control, then install the companion on your phone.
 
 ### macOS
 
@@ -50,6 +50,12 @@ You’ll need the MacDeck companion app on your phone for pairing. This reposito
 3. The WinDeck dashboard opens on your PC. For subsequent launches, you can use `run.bat` from the same folder.
 
 For a standalone executable, run `build_exe.bat` from the `windows` folder. Choose **1** for `dist\WinDeck.exe` or **2** for the folder bundle in `dist\WinDeck\`. [WinDeck guide](windows/README.md)
+
+## Install the Android companion
+
+1. Open the [android](android/) folder in Android Studio as its own project. Let Gradle sync and install Android SDK Platform 35 if prompted.
+2. On a phone running Android 7.0 or later, enable developer options and USB debugging. Connect it to the computer by USB and approve the debugging prompt on the phone.
+3. In Android Studio, select the **app** run configuration and your phone, then click **Run**. Once the app launches, you can disconnect USB. The deck communicates with the desktop over your local network.
 
 ## Pair your phone and try a tile
 
