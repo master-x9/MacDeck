@@ -4,6 +4,10 @@ MacDeck turns your Android phone into a control deck for your Mac. Build a page 
 
 MacDeck is my favorite project I’ve built. If you’re trying it for the first time, start with one button for something you do every day. That’s enough to make the deck feel like yours. — Jatin
 
+[![Support MacDeck via Razorpay](https://img.shields.io/badge/Support%20MacDeck-242529?style=for-the-badge&logo=razorpay&logoColor=white)](https://macdeck.fun/)
+
+Choose **Support** on the MacDeck site to make a one-time contribution in an amount you choose.
+
 ![MacDeck desktop dashboard with the deck editor and tile library](public/macdeck_app_dashboard.png)
 
 ## Download and install
