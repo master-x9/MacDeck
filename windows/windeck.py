@@ -15,8 +15,12 @@ import webbrowser
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
 
-# Ensure windows/ directory is in python path
-current_dir = os.path.dirname(os.path.abspath(__file__))
+# Support PyInstaller standalone bundle path
+if getattr(sys, "frozen", False):
+    current_dir = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
+else:
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
