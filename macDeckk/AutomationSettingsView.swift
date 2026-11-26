@@ -138,6 +138,12 @@ struct AutomationSettingsView: View {
 
     private var discordSettings: some View {
         VStack(alignment: .leading, spacing: 14) {
+            Text("Discord calls")
+                .font(.headline)
+            Text("Allow MacDeck in System Settings → Privacy & Security → Accessibility. Keep the Discord desktop window open with English controls. Its available call buttons appear on a live page, including mute, camera and disconnect.")
+                .font(.caption)
+            Divider()
+            Text("Pinned channels (optional)").font(.headline)
             Text("Create a bot at discord.com/developers/applications, enable “Message Content Intent” under the Bot tab, invite it to your own server(s), and paste its token below. MacDeck only ever talks to Discord as this bot — never as your personal account.")
                 .font(.caption)
                 .foregroundStyle(.secondary)

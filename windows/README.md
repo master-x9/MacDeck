@@ -1,59 +1,25 @@
-# WinDeck — Windows Host for MacDeck
+# WinDeck for Windows
 
-**WinDeck** is the Windows companion host for the **MacDeck** mobile app (Android / iOS). It enables you to use your phone or tablet as a high-speed, tactile wireless stream deck and macro controller for your Windows PC.
+WinDeck pairs with the MacDeck Android app over Wi-Fi. The desktop editor has a page sidebar, a phone preview, and a bottom tile library. The preview follows the two-, three-, or four-row layout chosen on the phone. Lock, unlock and the locked-screen layout are exclusive to macOS.
 
----
+## Run and pair
 
-## Features
+1. Extract the entire portable Windows x64 ZIP and open **WinDeck.exe**. Keep the app and runtime folders beside the executable. The desktop window uses Edge WebView2. If it is unavailable, WinDeck opens the dashboard in the default browser.
+2. Connect the phone and PC to the same local network. If Windows Firewall asks, allow WinDeck on the private network.
+3. Open MacDeck on Android, choose the PC in the discovery list, and click **Approve** on the desktop. WinDeck remembers the phone. Click **Disconnect** on its connection card to end the session. Approve the next connection when you want to resume. **Host settings → Trusted phones** lets you forget it.
 
-- **Seamless Discovery**: Automatically advertises `_macdeck._tcp` via mDNS/Bonjour on local port `62233`. Your phone auto-discovers your Windows PC just like a Mac.
-- **Zero-Latency Win32 Controls**:
-  - **Media Keys**: Play/Pause, Next Track, Previous Track, Mute, Volume Up/Down.
-  - **System Controls**: Lock Workstation (`Win+L`), Sleep PC, Keep Awake / Anti-Sleep caffeine mode, Show Desktop (`Win+D`), Task View (`Win+Tab`), Quit App (`Alt+F4`), Screenshot Snipping (`Win+Shift+S`), Screen Record, Empty Recycle Bin.
-  - **Browser Controls**: Tab 1–5, Back, Forward, Refresh, New Tab, Close Tab.
-  - **App Launcher**: Instant launch of any installed Windows application or shortcut.
-  - **Custom Hotkey Macros**: Supports key combinations like `CTRL+SHIFT+ESC`, `ALT+TAB`, and custom chords.
-  - **Websites**: Opens any URL with automatic high-resolution Google favicon extraction.
-  - **Locked Screen Layout**: Automatically switches the phone to a dedicated locked screen controller layout when your PC locks (`00000000-0000-0000-0000-000000000002`).
-  - **Running Apps Page**: Live monitor of top visible Windows applications with one-tap window focus.
-- **Desktop UI**:
-  - Dark mode liquid-glass dashboard matching the MacDeck aesthetic.
-  - Interactive 2x5 phone screen preview with tactile keycaps, drag-and-drop, and slot inspector.
-  - System tray icon with background minimize and auto-run support.
+The phone uses Bonjour/mDNS service `_macdeck._tcp` and WebSocket port 62233. The desktop dashboard listens on loopback port 62234. Pages and trusted devices are stored in the current Windows user's AppData/Roaming/WinDeck directory.
 
----
+## Discord calls
 
-## Quick Start (Running on Windows)
+Enable **Discord Calls** and keep the Discord desktop window open. WinDeck reads the English accessibility labels on Discord's own buttons. An active call provides mute or unmute, camera on or off, and disconnect. An incoming call provides answer and decline when Discord exposes both buttons. Buttons follow the current call state. Discord's tray-only mode, language, and which call controls are visible can affect availability.
 
-### Option 1: One-Click Run (Recommended)
-1. Ensure [Python 3.9+](https://www.python.org/downloads/) is installed and added to your system `PATH`.
-2. Double-click `run.bat` (or right-click `run.ps1` and choose "Run with PowerShell").
-3. WinDeck will automatically install any missing dependencies and start the desktop dashboard and network server.
+## OBS Studio
 
-### Option 2: Command Line
-```cmd
-cd windows
-pip install -r requirements.txt
-python windeck.py
-```
+In OBS 28 or later, enable **Tools → WebSocket Server Settings → Enable WebSocket server**. In WinDeck, enable **OBS Studio**, then enter the same local port and password under **Host settings**. WinDeck saves the password in Windows Credential Manager.
 
-### Option 3: Build Standalone `.exe`
-Double-click `build_exe.bat`. It will create a portable, standalone `WinDeck.exe` inside `dist/WinDeck/` that requires no Python installation to run!
+Open the live OBS page to start or stop recording and streaming, switch scenes, toggle the replay buffer, or mute the configured primary microphone. In a large scene collection, **Previous Scene** and **Next Scene** reach scenes beyond the visible grid. Selecting a live control in the desktop preview also runs it.
 
----
+## Build from source on Windows
 
-## Pairing Your Phone
-
-1. Ensure your phone and PC are connected to the **same Wi-Fi network**.
-2. Open the **MacDeck** mobile app on your phone.
-3. Your PC will appear automatically in the discovery list (e.g. `DESKTOP-XYZ`).
-4. Tap your PC to connect. A pairing prompt will appear on your Windows desktop.
-5. Click **Approve**. Your pages and icons will instantly sync to your phone!
-
----
-
-## Architecture & Ports
-
-- **Port 62233 (TCP)**: WebSocket wire protocol & mDNS Bonjour endpoint (`_macdeck._tcp`).
-- **Port 62234 (HTTP)**: Local desktop dashboard API (`http://localhost:62234`).
-- **Data Location**: `%APPDATA%\WinDeck\pages.json` and `%APPDATA%\WinDeck\TrustedDevices.json`.
+With Python 3.11 or later installed, double-click **run.bat** to install the dependencies and run the desktop host. **build_exe.bat** builds a standalone executable with PyInstaller. Select a single file or a folder bundle when prompted. Run the tests with `python -m unittest discover -s tests` after installing requirements.txt.

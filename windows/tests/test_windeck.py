@@ -8,6 +8,7 @@ import sys
 import json
 import base64
 import unittest
+import unittest.mock
 import asyncio
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -21,7 +22,7 @@ from models import (
 )
 from icons import get_icon, ICONS
 from action_engine import ActionEngine
-from page_store import PageStore, LockedPageProvider, BrowserPageProvider, LOCKED_PAGE_ID, RUNNING_APPS_PAGE_ID
+from page_store import PageStore, BrowserPageProvider, LOCKED_PAGE_ID, RUNNING_APPS_PAGE_ID
 from network import NetworkManager
 
 
@@ -76,18 +77,17 @@ class TestWinDeck(unittest.TestCase):
         pong_msg = ServerMessage.pong()
         self.assertEqual(json.loads(pong_msg)["type"], "pong")
 
-        lock_msg = ServerMessage.lock_state_changed(True)
-        self.assertEqual(json.loads(lock_msg)["isLocked"], True)
 
     def test_icons_validity(self):
         self.assertGreater(len(ICONS), 15)
         # Verify icons decode to valid PNG headers (bytes 1..4 = PNG)
-        for name in ["volumeUp", "playPause", "lockScreen", "keepAwake", "screenshot"]:
+        for name in ["volumeUp", "playPause", "desktop", "keepAwake", "screenshot"]:
             icon_b64 = get_icon(name)
             self.assertIsNotNone(icon_b64, f"Icon for {name} should exist")
             raw_bytes = base64.b64decode(icon_b64)
             self.assertTrue(raw_bytes.startswith(b"\x89PNG\r\n\x1a\n"), f"Icon {name} is not valid PNG")
 
+    @unittest.mock.patch("action_engine.IS_WINDOWS", False)
     def test_action_engine(self):
         engine = ActionEngine()
         # Test safe execution on any platform
@@ -133,14 +133,18 @@ class TestWinDeck(unittest.TestCase):
         store.delete_page(new_page.id)
         self.assertEqual(len(store.pages), initial_count)
 
-    def test_locked_page_provider(self):
-        locked_page = LockedPageProvider.get_locked_page()
-        self.assertEqual(locked_page.id, LOCKED_PAGE_ID)
-        self.assertEqual(len(locked_page.tiles), 10)
-        # Slot 4 should be volumeUp
-        self.assertEqual(locked_page.tiles[4].tileType.action, "volumeUp")
-        # Slot 7 should be playPause
-        self.assertEqual(locked_page.tiles[7].tileType.action, "playPause")
+    def test_legacy_windows_pages_omit_mac_controls(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            page = DeckPage(name="Saved", pageNumber=1)
+            for slot, action in enumerate(["lockScreen", "unlockMac", "kbBrightnessUp", "dnd", "volumeUp"]):
+                page.tiles[slot] = DeckTile(slot, TileType("systemControl", action=action))
+            with open(os.path.join(directory, "pages.json"), "w") as file:
+                json.dump([page.to_dict()], file)
+            store = PageStore(storage_dir=directory)
+            self.assertEqual(store.pages[0].tiles[:4], [None] * 4)
+            self.assertEqual(store.pages[0].tiles[4].tileType.action, "volumeUp")
+            self.assertNotIn(LOCKED_PAGE_ID, [p.id for p in store.all_pages])
 
     def test_network_handshake_and_trigger(self):
         executed_actions = []
@@ -204,8 +208,21 @@ class TestWinDeck(unittest.TestCase):
             await net._handle_message(json.dumps({"command": "PING"}), ws)
             self.assertEqual(ws.messages[-1]["type"], "pong")
 
-            # 5. Lock state notification
-            net.notify_lock_state(True)
+            await net._handle_message(json.dumps({"command": "TRIGGER_SLOT", "pageID": LOCKED_PAGE_ID, "slotIndex": 2}), ws)
+            self.assertEqual(len(executed_actions), 1)
+
+            await net.disconnect_device("device-new-999")
+            self.assertTrue(ws.closed)
+            self.assertTrue(store.trusted_devices.is_trusted("device-new-999"))
+            self.assertEqual(net.status, "waiting")
+            retry = MockWebSocket()
+            net.active_ws = retry
+            await net._handle_message(hello_msg, retry)
+            self.assertEqual(retry.messages[-1]["type"], "pairingPending")
+            await net._handle_message(trigger_msg, retry)
+            self.assertEqual(len(executed_actions), 1)
+            await net.approve_pairing("device-new-999")
+            self.assertEqual(net.status, "connected")
 
         asyncio.run(run_async_test())
 
@@ -214,9 +231,8 @@ class TestWinDeck(unittest.TestCase):
         from windeck import WinDeckApp, WinDeckHttpServer
 
         temp_dir = tempfile.mkdtemp()
-        app = WinDeckApp()
-        app.page_store = PageStore(action_engine=app.action_engine, storage_dir=temp_dir)
-        app.network = NetworkManager(page_store=app.page_store, action_engine=app.action_engine)
+        app = WinDeckApp(storage_dir=temp_dir)
+        self.addCleanup(app.loop.close)
 
         # Create mock server instance with app context (without binding port)
         server = WinDeckHttpServer.__new__(WinDeckHttpServer)
@@ -227,7 +243,8 @@ class TestWinDeck(unittest.TestCase):
         self.assertIn("pages", state)
         self.assertIn("controlsLibrary", state)
         self.assertIn("status", state)
-        self.assertGreater(len(state["controlsLibrary"]), 15)
+        self.assertIn("volumeUp", {act["action"] for act in state["controlsLibrary"]})
+        self.assertNotIn("lockScreen", {act["action"] for act in state["controlsLibrary"]})
 
         # Test API add_page
         res = server.handle_api("/api/add_page", {"name": "Streaming"})

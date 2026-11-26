@@ -17,7 +17,7 @@ try:
         ServerMessage, ClientCommand, DeckPage, DeckTile
     )
     from .page_store import (
-        PageStore, LockedPageProvider, RUNNING_APPS_PAGE_ID, LOCKED_PAGE_ID, BROWSER_PAGE_ID
+        PageStore, RUNNING_APPS_PAGE_ID
     )
     from .action_engine import ActionEngine
 except ImportError:
@@ -25,7 +25,7 @@ except ImportError:
         ServerMessage, ClientCommand, DeckPage, DeckTile
     )
     from page_store import (
-        PageStore, LockedPageProvider, RUNNING_APPS_PAGE_ID, LOCKED_PAGE_ID, BROWSER_PAGE_ID
+        PageStore, RUNNING_APPS_PAGE_ID
     )
     from action_engine import ActionEngine
 
@@ -77,8 +77,11 @@ class NetworkManager:
         self.status: str = "disconnected"
         self.connected_device_name: Optional[str] = None
         self.connected_client_id: Optional[str] = None
+        self.require_approval_on_return = set()
         self.pending_approval: Optional[Dict[str, str]] = None  # {"clientID": ..., "deviceName": ...}
 
+        self.loop = None
+        self.sent_pages = {}
         self.active_ws = None
         self.server = None
         self.zeroconf = None
@@ -170,7 +173,7 @@ class NetworkManager:
             return
 
         self.set_status("waiting")
-        self.start_mdns()
+        self.loop = asyncio.get_running_loop()
 
         try:
             self.server = await websockets.serve(
@@ -179,6 +182,7 @@ class NetworkManager:
                 PORT,
                 max_size=50 * 1024 * 1024,  # 50MB for full page sync with base64 icons
             )
+            await asyncio.to_thread(self.start_mdns)
             logger.info(f"WebSocket server listening on port {PORT}")
         except Exception as e:
             logger.error(f"Failed to bind WebSocket server on port {PORT}: {e}")
@@ -186,7 +190,7 @@ class NetworkManager:
 
     async def stop(self):
         """Gracefully shuts down WebSocket server and mDNS."""
-        self.stop_mdns()
+        await asyncio.to_thread(self.stop_mdns)
         if self.active_ws:
             try:
                 await self.active_ws.close()
@@ -207,13 +211,13 @@ class NetworkManager:
     async def _handle_client(self, websocket):
         logger.info(f"New client connected from {websocket.remote_address}")
 
-        # If already connected, replace with new session
-        if self.active_ws:
-            try:
-                await self.active_ws.close()
-            except Exception:
-                pass
+        if self.active_ws is not None:
+            await websocket.close(code=1013, reason="Another phone is connected")
+            return
 
+        self.pending_approval = None
+        self.connected_client_id = None
+        self.sent_pages = {}
         self.active_ws = websocket
         self.set_status("awaitingHello")
 
@@ -227,10 +231,13 @@ class NetworkManager:
         finally:
             if self.active_ws == websocket:
                 self.active_ws = None
+                self.pending_approval = None
                 self.connected_client_id = None
                 self.set_status("waiting")
 
     async def _handle_message(self, raw_str: str, websocket):
+        if websocket is not self.active_ws:
+            return
         try:
             cmd = ClientCommand.parse(raw_str)
         except Exception as e:
@@ -261,18 +268,23 @@ class NetworkManager:
 
         # 4. TRIGGER_SLOT
         if cmd.command == "TRIGGER_SLOT":
-            self._handle_trigger_slot(cmd)
+            await self._handle_trigger_slot(cmd)
 
     async def _handle_hello(self, cmd: ClientCommand, websocket):
-        client_id = cmd.clientID or "unknown"
+        if not cmd.clientID or self.status == "connected":
+            return
+        self.pending_approval = None
+        client_id = cmd.clientID
         device_name = cmd.deviceName or "Phone"
 
-        if cmd.protocolVersion < REQUIRED_PROTOCOL_VERSION:
+        if cmd.protocolVersion != REQUIRED_PROTOCOL_VERSION:
             await websocket.send(ServerMessage.version_mismatch(REQUIRED_PROTOCOL_VERSION))
+            await websocket.close()
             return
 
+        self.page_store.grid_rows = cmd.gridRows if cmd.gridRows in (2, 3, 4) else 2
         # Check trust
-        if self.page_store.trusted_devices.is_trusted(client_id):
+        if self.page_store.trusted_devices.is_trusted(client_id) and client_id not in self.require_approval_on_return:
             self.connected_client_id = client_id
             self.page_store.trusted_devices.record_connection(client_id)
             await websocket.send(ServerMessage.pairing_approved())
@@ -284,10 +296,22 @@ class NetworkManager:
             self.set_status("awaitingApproval", device_name)
             await websocket.send(ServerMessage.pairing_pending())
 
+    async def disconnect_device(self, client_id):
+        if self.status != "connected" or not self.active_ws or client_id != self.connected_client_id:
+            return
+        socket = self.active_ws
+        self.require_approval_on_return.add(client_id)
+        self.active_ws = None
+        self.connected_client_id = None
+        self.sent_pages = {}
+        self.set_status("waiting")
+        await socket.close()
+
     async def approve_pairing(self, client_id: str):
         """Approved by user from desktop UI."""
         if self.pending_approval and self.pending_approval.get("clientID") == client_id:
             device_name = self.pending_approval.get("deviceName", "Phone")
+            self.require_approval_on_return.discard(client_id)
             self.page_store.trusted_devices.trust(client_id, device_name)
             self.connected_client_id = client_id
             self.pending_approval = None
@@ -308,43 +332,40 @@ class NetworkManager:
     # -------------------------------------------------------------------------
     # Slot Execution & Sync
     # -------------------------------------------------------------------------
-    def _handle_trigger_slot(self, cmd: ClientCommand):
-        page_id = cmd.pageID
-        slot_index = cmd.slotIndex
-        if slot_index is None or slot_index < 0:
+    async def _handle_trigger_slot(self, cmd):
+        await self.execute_slot(self.sent_pages.get(cmd.pageID), cmd.slotIndex)
+
+    async def execute_slot(self, page, slot):
+        if not page or type(slot) is not int or not 0 <= slot < len(page.tiles):
             return
-
-        target_tile: Optional[DeckTile] = None
-
-        # 1. Locked screen page
-        if page_id == LOCKED_PAGE_ID:
-            locked_page = LockedPageProvider.get_locked_page()
-            if slot_index < len(locked_page.tiles):
-                target_tile = locked_page.tiles[slot_index]
-        # 2. Running apps page
-        elif page_id == RUNNING_APPS_PAGE_ID:
-            running_page = self.page_store.get_running_apps_page()
-            if slot_index < len(running_page.tiles):
-                target_tile = running_page.tiles[slot_index]
-                if target_tile and target_tile.tileType.bundleIdentifier:
-                    self.action_engine.focus_window(target_tile.tileType.bundleIdentifier)
-                    return
-        # 3. Regular user page
-        else:
-            for p in self.page_store.all_pages:
-                if p.id == page_id:
-                    if slot_index < len(p.tiles):
-                        target_tile = p.tiles[slot_index]
-                    break
-
-        if target_tile:
-            self.action_engine.execute(target_tile.tileType)
-        else:
-            logger.warning(f"Empty or missing tile at page {page_id}, slot {slot_index}")
+        tile = page.tiles[slot]
+        if not tile:
+            return
+        target = tile.tileType
+        try:
+            if target.type == "discordControl":
+                from integrations import discord_call
+                if self.page_store.show_discord:
+                    await asyncio.to_thread(discord_call, target.action)
+            elif target.type == "obsControl":
+                if self.page_store.show_obs:
+                    await asyncio.to_thread(self.obs.execute, target)
+            elif page.id == RUNNING_APPS_PAGE_ID:
+                self.action_engine.focus_window(target.bundleIdentifier)
+            else:
+                self.action_engine.execute(target)
+        except Exception as error:
+            logger.warning("Deck action failed: %s", error)
+            if self.active_ws and self.status == "connected":
+                await self.active_ws.send(ServerMessage.error("Action unavailable. Check the desktop app."))
 
     async def _send_full_sync(self, websocket):
         """Sends all pages down to the phone client."""
-        msg = ServerMessage.page_sync(self.page_store.all_pages)
+        if websocket is not self.active_ws or self.status != "connected":
+            return
+        pages = self.page_store.all_pages
+        self.sent_pages = {p.id: p for p in pages}
+        msg = ServerMessage.page_sync(pages)
         await websocket.send(msg)
         logger.info("Sent full PAGE_SYNC to client")
 
@@ -352,8 +373,8 @@ class NetworkManager:
         """Thread-safe / async broadcast of page updates to active client."""
         if self.active_ws and self.status == "connected":
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
+                loop = self.loop
+                if loop and loop.is_running():
                     asyncio.run_coroutine_threadsafe(
                         self._send_full_sync(self.active_ws), loop
                     )
@@ -364,24 +385,11 @@ class NetworkManager:
         """Commands phone client to switch to a specific page."""
         if self.active_ws and self.status == "connected":
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
+                loop = self.loop
+                if loop and loop.is_running():
                     asyncio.run_coroutine_threadsafe(
                         self.active_ws.send(ServerMessage.switch_to_page(page_id)), loop
                     )
             except Exception as e:
                 logger.debug(f"Switch to page failed: {e}")
 
-    def notify_lock_state(self, is_locked: bool):
-        """Sends lock state update and switches phone to/from locked layout."""
-        if self.active_ws and self.status == "connected":
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    asyncio.run_coroutine_threadsafe(
-                        self.active_ws.send(ServerMessage.lock_state_changed(is_locked)), loop
-                    )
-                    target_page = LOCKED_PAGE_ID if is_locked else (self.page_store.selected_page_id or self.page_store.pages[0].id)
-                    self.switch_to_page(target_page)
-            except Exception as e:
-                logger.debug(f"Notify lock state failed: {e}")

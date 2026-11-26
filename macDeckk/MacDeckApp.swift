@@ -48,6 +48,7 @@ struct MacDeckApp: App {
                     network.onAutoSwitchPage = { [weak store] pageID in
                         store?.selectedPageID = pageID
                     }
+                    network.observeIntegrations(in: store)
                     network.start()
                     self.menuBarController = MenuBarController(pageStore: store, deckNetworkManager: network)
                 }

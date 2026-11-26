@@ -1,6 +1,6 @@
 """
 WinDeck PageStore & Device Trust Store
-Manages user-configured pages, dynamic pages (Running Apps, Browser Control, Locked Screen),
+Manages user-configured pages, dynamic pages (Running Apps, Browser Control, integrations),
 and device pairing persistence in %APPDATA%/WinDeck/.
 """
 
@@ -30,6 +30,14 @@ LOCKED_PAGE_ID = "00000000-0000-0000-0000-000000000002"
 BROWSER_PAGE_ID = "00000000-0000-0000-0000-000000000003"
 
 
+def supported(tile_type):
+    if tile_type.type == "systemControl":
+        return tile_type.action in SystemControlAction._value2member_map_
+    if tile_type.type == "shortcut" and (tile_type.name or "").upper().replace(" ", "") in ("WIN+L", "WIN+L(LOCK)"):
+        return False
+    return True
+
+
 def get_storage_dir(custom_dir: Optional[str] = None) -> str:
     """Returns the persistent storage directory for WinDeck."""
     if custom_dir:
@@ -47,46 +55,6 @@ def get_storage_dir(custom_dir: Optional[str] = None) -> str:
             path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".windeck_data"))
     os.makedirs(path, exist_ok=True)
     return path
-
-
-# -----------------------------------------------------------------------------
-# Locked Screen Page Provider
-# -----------------------------------------------------------------------------
-class LockedPageProvider:
-    """Fixed locked screen companion layout matching MacDeck 1:1."""
-    locked_page_id = LOCKED_PAGE_ID
-
-    @classmethod
-    def get_locked_page(cls) -> DeckPage:
-        # Slot layout (0-indexed):
-        # 0: Brightness Up   1: Sleep PC      2: Unlock PC   3: Keep Awake
-        # 4: Volume Up       5: Brightness Dn 6: Prev Track  7: Play/Pause
-        # 8: Next Track      9: Volume Down
-        slots = [
-            (0, SystemControlAction.brightnessUp),
-            (1, SystemControlAction.sleepMac),
-            (2, SystemControlAction.unlockMac),
-            (3, SystemControlAction.keepAwake),
-            (4, SystemControlAction.volumeUp),
-            (5, SystemControlAction.brightnessDown),
-            (6, SystemControlAction.previousTrack),
-            (7, SystemControlAction.playPause),
-            (8, SystemControlAction.nextTrack),
-            (9, SystemControlAction.volumeDown),
-        ]
-        tiles: List[Optional[DeckTile]] = [None] * 10
-        for slot, action in slots:
-            tiles[slot] = DeckTile(
-                slotIndex=slot,
-                tileType=TileType(type="systemControl", action=action.value),
-                iconData=get_icon(action.value),
-            )
-        return DeckPage(
-            id=cls.locked_page_id,
-            name="Locked",
-            pageNumber=-1,
-            tiles=tiles,
-        )
 
 
 # -----------------------------------------------------------------------------
@@ -110,9 +78,10 @@ class BrowserPageProvider:
             (8, BrowserControlAction.newTab),
             (9, BrowserControlAction.closeTab),
         ]
-        tiles: List[Optional[DeckTile]] = [None] * 10
+        tiles: List[Optional[DeckTile]] = [None] * 20
         for slot, act in actions:
             tiles[slot] = DeckTile(
+                id=str(uuid.uuid5(uuid.UUID(cls.browser_page_id), str(slot))).upper(),
                 slotIndex=slot,
                 tileType=TileType(type="browserControl", action=act.value),
                 iconData=get_icon(act.value),
@@ -197,14 +166,35 @@ class PageStore:
         self.show_running_apps_page: bool = True
         self.show_browser_control_page: bool = True
 
+        self.browser_active = False
+        self.running_apps = []
+        self.live_pages = {}
+        self.grid_rows = 2
+        self.show_obs = True
+        self.show_discord = True
+        self.obs_port = 4455
         self.on_change_callbacks: List[Callable[[], None]] = []
 
         self.load()
         if not self.pages:
             self.pages = [self.create_default_main_page()]
             self.save()
-        if not self.selected_page_id and self.pages:
+        if not any(page.id == self.selected_page_id for page in self.all_pages) and self.pages:
             self.selected_page_id = self.pages[0].id
+
+    def update_live_page(self, page_id, page):
+        if self.live_pages.get(page_id) == page:
+            return
+        pages = dict(self.live_pages)
+        if page:
+            pages[page_id] = page
+        else:
+            pages.pop(page_id, None)
+            if self.selected_page_id == page_id:
+                self.selected_page_id = self.pages[0].id
+        self.live_pages = pages
+        for callback in self.on_change_callbacks:
+            callback()
 
     def subscribe(self, callback: Callable[[], None]):
         """Subscribes to page modifications."""
@@ -222,13 +212,30 @@ class PageStore:
     # -------------------------------------------------------------------------
     # Dynamic Pages & All Pages
     # -------------------------------------------------------------------------
+    def set_browser_active(self, active):
+        if self.browser_active != active:
+            self.browser_active = active
+            if not active and self.selected_page_id == BROWSER_PAGE_ID:
+                self.selected_page_id = self.pages[0].id
+            for callback in self.on_change_callbacks:
+                callback()
+
+    def refresh_running_apps(self):
+        if self.show_running_apps_page and self.action_engine:
+            apps = self.action_engine.get_running_apps()
+            if apps != self.running_apps:
+                self.running_apps = apps
+                for callback in self.on_change_callbacks:
+                    callback()
+
     def get_running_apps_page(self) -> DeckPage:
         """Constructs a running apps page from active Windows visible windows."""
-        tiles: List[Optional[DeckTile]] = [None] * 10
+        tiles: List[Optional[DeckTile]] = [None] * 20
         if self.action_engine:
-            running = self.action_engine.get_running_apps()
+            running = self.running_apps
             for idx, app in enumerate(running[:10]):
                 tiles[idx] = DeckTile(
+                    id=str(uuid.uuid5(uuid.UUID(RUNNING_APPS_PAGE_ID), app["bundleIdentifier"])).upper(),
                     slotIndex=idx,
                     tileType=TileType(type="app", name=app["name"], bundleIdentifier=app["bundleIdentifier"]),
                     customLabel=app["name"][:12],
@@ -245,10 +252,12 @@ class PageStore:
     def all_pages(self) -> List[DeckPage]:
         """Returns all pages: dynamic pages (if enabled) followed by user pages."""
         pages_list: List[DeckPage] = []
-        if self.show_browser_control_page:
+        if self.show_browser_control_page and self.browser_active:
             pages_list.append(BrowserPageProvider.get_browser_page())
         if self.show_running_apps_page:
             pages_list.append(self.get_running_apps_page())
+        pages_list.extend(p for p in self.live_pages.values()
+                          if (p.pageNumber == -2 and self.show_obs) or (p.pageNumber == -4 and self.show_discord))
         pages_list.extend(self.pages)
         return pages_list
 
@@ -273,15 +282,16 @@ class PageStore:
             (4, SystemControlAction.mute),
             (5, SystemControlAction.screenshot),
             (6, SystemControlAction.keepAwake),
-            (7, SystemControlAction.lockScreen),
+            (7, SystemControlAction.previousTrack),
             (8, SystemControlAction.desktop),
             (9, SystemControlAction.emptyTrash),
         ]
-        tiles: List[Optional[DeckTile]] = [None] * 10
+        tiles: List[Optional[DeckTile]] = [None] * 20
         for slot, act in default_actions:
             tiles[slot] = DeckTile(
                 slotIndex=slot,
                 tileType=TileType(type="systemControl", action=act.value),
+                customLabel=act.display_name,
                 iconData=get_icon(act.value),
             )
         return DeckPage(name="Main", pageNumber=1, tiles=tiles)
@@ -312,6 +322,8 @@ class PageStore:
 
     def set_tile(self, page_id: str, slot_index: int, tile: DeckTile):
         """Sets or replaces a tile in a page's slot."""
+        if not supported(tile.tileType):
+            return
         for p in self.pages:
             if p.id == page_id and 0 <= slot_index < len(p.tiles):
                 tile.slotIndex = slot_index
@@ -352,7 +364,11 @@ class PageStore:
             try:
                 with open(self.pages_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                self.pages = [DeckPage.from_dict(p) for p in data]
+                self.pages = [DeckPage.from_dict(p) for p in data if p.get("id") != LOCKED_PAGE_ID]
+                for page in self.pages:
+                    for slot, tile in enumerate(page.tiles):
+                        if tile and not supported(tile.tileType):
+                            page.tiles[slot] = None
             except Exception as e:
                 logger.error(f"Failed to load pages.json: {e}")
                 self.pages = []
@@ -363,6 +379,9 @@ class PageStore:
                     settings = json.load(f)
                 self.show_running_apps_page = settings.get("showRunningAppsPage", True)
                 self.show_browser_control_page = settings.get("showBrowserControlPage", True)
+                self.show_obs = settings.get("showOBS", True)
+                self.show_discord = settings.get("showDiscord", True)
+                self.obs_port = settings.get("obsPort", 4455)
                 self.selected_page_id = settings.get("selectedPageID")
             except Exception as e:
                 logger.error(f"Failed to load settings.json: {e}")
@@ -376,6 +395,9 @@ class PageStore:
             settings = {
                 "showRunningAppsPage": self.show_running_apps_page,
                 "showBrowserControlPage": self.show_browser_control_page,
+                "showOBS": self.show_obs,
+                "showDiscord": self.show_discord,
+                "obsPort": self.obs_port,
                 "selectedPageID": self.selected_page_id,
             }
             with open(self.settings_file, "w", encoding="utf-8") as f:

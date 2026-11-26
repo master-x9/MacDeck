@@ -29,9 +29,7 @@ final class PageStore: ObservableObject {
     }
     @Published var selectedPageID: UUID? {
         didSet {
-            if let newID = selectedPageID, 
-               newID != BrowserMonitor.browserPageID, 
-               newID != RunningAppsMonitor.runningAppsPageID {
+            if let newID = selectedPageID, pages.contains(where: { $0.id == newID }) {
                 previousNonDynamicPageID = newID
             }
         }
@@ -69,7 +67,8 @@ final class PageStore: ObservableObject {
     @Published var showDiscordPage: Bool = true {
         didSet {
             UserDefaults.standard.set(showDiscordPage, forKey: "phonedeck.showDiscordPage")
-            if !showDiscordPage && isDiscordSelected {
+            DiscordCalls.shared.enabled = showDiscordPage
+            if !showDiscordPage && (isDiscordSelected || selectedPageID == DiscordCalls.pageID) {
                 selectedPageID = previousNonDynamicPageID ?? pages.first?.id
             }
         }
@@ -88,6 +87,7 @@ final class PageStore: ObservableObject {
         if showOBSPage, let op = obsMonitor.obsPage, selectedPageID == OBSControlManager.obsPageID {
             return op
         }
+        if showDiscordPage, selectedPageID == DiscordCalls.pageID { return DiscordCalls.shared.page }
         if showDiscordPage, let dp = discordMonitor.discordPage, selectedPageID == DiscordControlManager.discordPageID {
             return dp
         }
@@ -109,6 +109,7 @@ final class PageStore: ObservableObject {
         if showDiscordPage, let dp = discordMonitor.discordPage {
             list.append(dp)
         }
+        if showDiscordPage, let call = DiscordCalls.shared.page { list.append(call) }
         list.append(contentsOf: pages)
         return list
     }
@@ -143,6 +144,7 @@ final class PageStore: ObservableObject {
         if showOBSPage, bundleID == OBSControlManager.obsBundleID, obsMonitor.obsPage != nil {
             return OBSControlManager.obsPageID
         }
+        if showDiscordPage, bundleID == DiscordControlManager.discordBundleID, DiscordCalls.shared.page != nil { return DiscordCalls.pageID }
         if showDiscordPage, bundleID == DiscordControlManager.discordBundleID, discordMonitor.discordPage != nil {
             return DiscordControlManager.discordPageID
         }
@@ -218,6 +220,13 @@ final class PageStore: ObservableObject {
                 self.objectWillChange.send()
             }
             .store(in: &cancellables)
+
+        DiscordCalls.shared.enabled = showDiscordPage
+        DiscordCalls.shared.$page.sink { [weak self] page in
+            guard let self else { return }
+            if page == nil && self.selectedPageID == DiscordCalls.pageID { self.selectedPageID = self.previousNonDynamicPageID ?? self.pages.first?.id }
+            self.objectWillChange.send()
+        }.store(in: &cancellables)
 
         obsMonitor.$obsPage
             .sink { [weak self] newPage in

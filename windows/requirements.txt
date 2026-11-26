@@ -4,3 +4,6 @@ websockets>=12.0
 pywebview>=5.0
 pystray>=0.19.5
 Pillow>=10.0.0
+pywinauto>=0.6.8; sys_platform == "win32"
+psutil>=5.9; sys_platform == "win32"
+pywin32>=306; sys_platform == "win32"

@@ -132,8 +132,8 @@ struct PhoneFrameGridView: View {
                 // C. Main 2×5 Grid Viewport
                 ZStack {
                     if let activePage = store.activePage {
-                        let isRunningApps = activePage.id == RunningAppsMonitor.runningAppsPageID
-                        let tileCount = isRunningApps ? activePage.tiles.count : store.gridRows * 5
+                        let isLivePage = store.activePageIndex == nil
+                        let tileCount = store.isRunningAppsSelected ? activePage.tiles.count : store.gridRows * 5
 
                         ScrollView(.vertical, showsIndicators: false) {
                             LazyVGrid(columns: columns, spacing: 14) {
@@ -143,7 +143,7 @@ struct PhoneFrameGridView: View {
                                         tile: index < activePage.tiles.count ? activePage.tiles[index] : nil,
                                         isSelected: selectedSlot == index,
                                         isEditModeActive: isEditModeActive,
-                                        isRunningApps: isRunningApps,
+                                        isRunningApps: isLivePage,
                                         onSelectSlot: {
                                             withAnimation(.spring(response: 0.15, dampingFraction: 0.8)) {
                                                 selectedSlot = index
@@ -151,7 +151,7 @@ struct PhoneFrameGridView: View {
                                             }
                                         },
                                         onTileTapped: { tile in
-                                            if isRunningApps {
+                                            if isLivePage {
                                                 SystemActionEngine.shared.execute(tile.tileType)
                                             } else if !isEditModeActive {
                                                 editingTileSlot = index

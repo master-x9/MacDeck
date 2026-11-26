@@ -149,6 +149,9 @@ struct ContentView: View {
                                 .tag(op.id)
                         }
 
+                        if store.showDiscordPage, let call = DiscordCalls.shared.page {
+                            Label(call.name, systemImage: "phone.fill").tag(call.id)
+                        }
                         if store.showDiscordPage, let dp = store.discordMonitor.discordPage {
                             discordRow(dp)
                                 .tag(dp.id)
@@ -196,6 +199,13 @@ struct ContentView: View {
             }
 
             Spacer()
+
+            if case .connected = network.status {
+                Button("Disconnect") { network.disconnectDevice() }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                    .help("Disconnect the phone. Approve its next connection to reconnect.")
+            }
 
             Circle()
                 .fill(statusColor)
@@ -508,7 +518,7 @@ struct ContentView: View {
                         .padding(.bottom, 6)
 
                         // 2. Integrated Tile Library Dock (Bottom Drawer)
-                        if !isRunningAppsPage {
+                        if !isLivePage {
                             TileLibraryView(
                                 selectedSlot: $selectedSlot,
                                 showingLibrary: $showingLibrary
@@ -524,7 +534,7 @@ struct ContentView: View {
                                     .foregroundStyle(.secondary)
                                 Text("Dynamic Page Mode")
                                     .font(.headline)
-                                Text("This page automatically reflects your currently active open applications.")
+                                Text("The host updates these tiles automatically.")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -542,8 +552,8 @@ struct ContentView: View {
         }
     }
 
-    private var isRunningAppsPage: Bool {
-        store.isRunningAppsSelected
+    private var isLivePage: Bool {
+        store.activePageIndex == nil
     }
 
     // MARK: - Top Toolbar Bar
@@ -557,7 +567,7 @@ struct ContentView: View {
                             .font(.system(size: 16, weight: .bold))
                             .foregroundStyle(.primary)
 
-                        if !isRunningAppsPage {
+                        if !isLivePage {
                             Button {
                                 editingPageName = activePage.name
                                 editingPageID = activePage.id

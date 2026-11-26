@@ -754,3 +754,33 @@ body {
   justify-content: space-between;
   gap: 8px;
 }
+
+/* Match the Mac editor's sidebar, phone preview and bottom library dock. */
+.sidebar { width: clamp(205px, 24vw, 265px); overflow-y: auto; }
+.pages-list { min-height: 80px; }
+.main-content { min-width: 0; overflow-y: auto; }
+.canvas-header { flex-shrink: 0; }
+.phone-frame { width: min(580px, 96%); height: clamp(225px, 37vh, 360px); }
+.deck-grid { min-height: 0; gap: 6px; }
+.keycap { min-width: 0; min-height: 0; overflow: hidden; }
+.deck-grid[data-rows="3"] .keycap-icon, .deck-grid[data-rows="4"] .keycap-icon { height: 36%; }
+.library-drawer { width: auto; flex: 1 0 185px; min-height: 185px; margin: 0 16px 12px; border: 1px solid var(--border-subtle); border-radius: 12px; gap: 6px; padding: 10px; }
+.library-drawer[hidden] { display: none !important; }
+.drawer-content { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
+#integrationSettings { color: var(--text-primary); border: 1px solid var(--border-subtle); margin: auto; }
+#integrationSettings::backdrop { background: rgba(0,0,0,.65); }
+#integrationForm { display: grid; gap: 12px; padding: 18px; }
+#integrationForm p { line-height: 1.5; font-size: 13px; }
+#integrationForm input[type=checkbox] { width: auto; }
+button:disabled { opacity: .45; cursor: default; }
+#integrationSettings:not([open]) { display: none; }
+.toggle-row input { display: block; position: absolute; opacity: 0; width: 1px; }
+.toggle-row input:focus-visible + .toggle-slider { outline: 2px solid var(--accent-blue); }
+
+.page-item, .keycap, .library-item { color: inherit; font-family: inherit; }
+.page-item { border: 0; text-align: left; }
+
+.phone-frame:has(.deck-grid[data-rows="4"]) { height: max(335px, 40vh); }
+.phone-frame:has(.deck-grid[data-rows="3"]) { height: max(280px, 38vh); }
+#integrationSettings { max-height: 90vh; overflow-y: auto; }
+#addCustomTile[hidden] { display: none; }

@@ -13,8 +13,6 @@ import json
 class SystemControlAction(str, Enum):
     brightnessUp = "brightnessUp"
     brightnessDown = "brightnessDown"
-    kbBrightnessUp = "kbBrightnessUp"
-    kbBrightnessDown = "kbBrightnessDown"
     playPause = "playPause"
     nextTrack = "nextTrack"
     previousTrack = "previousTrack"
@@ -25,21 +23,16 @@ class SystemControlAction(str, Enum):
     screenRecord = "screenRecord"
     keepAwake = "keepAwake"
     quitFrontmostApp = "quitFrontmostApp"
-    lockScreen = "lockScreen"
     sleepMac = "sleepMac"  # Wire protocol uses "sleepMac" for sleep PC
     desktop = "desktop"
     missionControl = "missionControl"  # Task View (Win+Tab)
     emptyTrash = "emptyTrash"
-    unlockMac = "unlockMac"
-    dnd = "dnd"
 
     @property
     def display_name(self) -> str:
         names = {
             "brightnessUp": "Bright",
             "brightnessDown": "Dim",
-            "kbBrightnessUp": "KB Bright",
-            "kbBrightnessDown": "KB Dim",
             "playPause": "Play",
             "nextTrack": "Next",
             "previousTrack": "Previous",
@@ -50,13 +43,10 @@ class SystemControlAction(str, Enum):
             "screenRecord": "Record",
             "keepAwake": "Caffeine",
             "quitFrontmostApp": "Quit App",
-            "lockScreen": "Lock",
             "sleepMac": "Sleep PC",
             "desktop": "Desktop",
             "missionControl": "Task View",
             "emptyTrash": "Empty Bin",
-            "unlockMac": "Unlock",
-            "dnd": "DND",
         }
         return names.get(self.value, self.value)
 
@@ -66,8 +56,6 @@ class SystemControlAction(str, Enum):
             "brightnessDown": "F1",
             "brightnessUp": "F2",
             "missionControl": "⊞Tab",
-            "kbBrightnessDown": "F5",
-            "kbBrightnessUp": "F6",
             "previousTrack": "Prev",
             "playPause": "Play",
             "nextTrack": "Next",
@@ -76,14 +64,11 @@ class SystemControlAction(str, Enum):
             "volumeUp": "Vol+",
             "screenshot": "⊞⇧S",
             "screenRecord": "⊞AltR",
-            "lockScreen": "⊞L",
             "quitFrontmostApp": "Alt+F4",
             "desktop": "⊞D",
             "emptyTrash": "Bin",
             "keepAwake": "☕",
             "sleepMac": "☾",
-            "unlockMac": "PIN",
-            "dnd": "Focus",
         }
         return badges.get(self.value, "")
 
@@ -115,38 +100,6 @@ class BrowserControlAction(str, Enum):
             "closeTab": "Close Tab",
         }
         return names.get(self.value, self.value)
-
-
-@dataclass
-class OBSControlAction:
-    kind: str  # switchScene, toggleRecording, toggleStreaming, toggleReplayBuffer, toggleMicMute
-    name: Optional[str] = None
-
-    @property
-    def display_name(self) -> str:
-        if self.kind == "switchScene":
-            return self.name or "Scene"
-        if self.kind == "toggleRecording":
-            return "Record"
-        if self.kind == "toggleStreaming":
-            return "Stream"
-        if self.kind == "toggleReplayBuffer":
-            return "Replay"
-        if self.kind == "toggleMicMute":
-            return "Mic"
-        return self.kind
-
-
-@dataclass
-class DiscordControlAction:
-    kind: str = "openChannel"
-    guildID: str = ""
-    channelID: str = ""
-    isDM: bool = False
-
-    @property
-    def display_name(self) -> str:
-        return "Discord"
 
 
 @dataclass
@@ -244,15 +197,16 @@ class DeckPage:
     name: str
     pageNumber: int
     id: str = field(default_factory=lambda: str(uuid.uuid4()).upper())
-    tiles: List[Optional[DeckTile]] = field(default_factory=lambda: [None] * 10)
+    tiles: List[Optional[DeckTile]] = field(default_factory=lambda: [None] * 20)
 
-    slot_count: int = 10
+    triggerApps: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
             "name": self.name,
             "pageNumber": self.pageNumber,
+            "triggerApps": self.triggerApps,
             "tiles": [t.to_dict() if t else None for t in self.tiles],
         }
 
@@ -268,13 +222,14 @@ class DeckPage:
             else:
                 tiles.append(None)
         # Ensure length is at least 10
-        while len(tiles) < 10:
+        while len(tiles) < 20:
             tiles.append(None)
         return cls(
             id=data.get("id", str(uuid.uuid4()).upper()),
             name=data.get("name", "Page"),
             pageNumber=data.get("pageNumber", 1),
-            tiles=tiles[:10],
+            tiles=tiles[:20],
+            triggerApps=data.get("triggerApps", []),
         )
 
 
@@ -284,6 +239,11 @@ class ServerMessage:
     def page_sync(pages: List[DeckPage]) -> str:
         # Phone client reads "page" (legacy) or "pages"
         pages_dict = [p.to_dict() for p in pages]
+        for page in pages_dict:
+            page.pop("triggerApps", None)
+            for tile in page["tiles"]:
+                if tile and tile["tileType"]["type"] in ("obsControl", "discordControl"):
+                    tile["tileType"] = {"type": "shortcut", "name": tile["customLabel"]}
         return json.dumps({
             "type": "pageSync",
             "page": pages_dict
@@ -322,14 +282,6 @@ class ServerMessage:
             "type": "versionMismatch",
             "requiredVersion": required_version
         })
-
-    @staticmethod
-    def lock_state_changed(is_locked: bool) -> str:
-        return json.dumps({
-            "type": "lockStateChanged",
-            "isLocked": is_locked
-        })
-
 
 # Client -> Server Commands
 @dataclass

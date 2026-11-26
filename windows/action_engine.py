@@ -19,6 +19,7 @@ except ImportError:
 logger = logging.getLogger("WinDeck.ActionEngine")
 
 IS_WINDOWS = sys.platform == "win32"
+BROWSERS = {"chrome.exe", "msedge.exe", "brave.exe", "firefox.exe", "vivaldi.exe", "opera.exe"}
 
 if IS_WINDOWS:
     import ctypes
@@ -134,10 +135,6 @@ class ActionEngine:
                 self.open_website(tile_type.url)
             elif kind == "shortcut" and tile_type.name:
                 self.execute_macro(tile_type.name)
-            elif kind == "obsControl":
-                self.perform_obs_action(tile_type.action or tile_type.name or "")
-            elif kind == "discordControl":
-                self.perform_discord_action(tile_type.action or tile_type.name or "")
             else:
                 logger.warning(f"Unknown or unhandled tile type: {kind}")
         except Exception as e:
@@ -164,11 +161,6 @@ class ActionEngine:
             self.adjust_brightness(step=10)
         elif action == SystemControlAction.brightnessDown:
             self.adjust_brightness(step=-10)
-        elif action == SystemControlAction.kbBrightnessUp or action == SystemControlAction.kbBrightnessDown:
-            # Simulated brightness adjustment or vendor specific
-            self.tap_key(VK_F6 if action == SystemControlAction.kbBrightnessUp else VK_F5)
-        elif action == SystemControlAction.lockScreen:
-            self.lock_workstation()
         elif action == SystemControlAction.sleepMac:
             self.sleep_pc()
         elif action == SystemControlAction.keepAwake:
@@ -190,19 +182,6 @@ class ActionEngine:
             self.tap_combo([VK_LWIN, VK_MENU], 0x52)  # 'R'
         elif action == SystemControlAction.emptyTrash:
             self.empty_recycle_bin()
-        elif action == SystemControlAction.unlockMac:
-            # Wake display / send a keystroke to show Windows login screen
-            self.tap_key(VK_SPACE)
-        elif action == SystemControlAction.dnd:
-            # Win + N (Notification center / Focus assist)
-            self.tap_combo([VK_LWIN], 0x4E)  # 'N'
-
-    def lock_workstation(self):
-        """Locks the Windows workstation instantly."""
-        if IS_WINDOWS and user32:
-            user32.LockWorkStation()
-        else:
-            logger.info("[MOCK] Workstation locked")
 
     def sleep_pc(self):
         """Puts Windows PC to sleep."""
@@ -261,6 +240,8 @@ class ActionEngine:
     # -------------------------------------------------------------------------
     def perform_browser_control(self, action: BrowserControlAction):
         """Executes tab and navigation shortcuts for browsers."""
+        if IS_WINDOWS and self.foreground_executable() not in BROWSERS:
+            return
         key_map = {
             BrowserControlAction.switchTab1: ([VK_CONTROL], 0x31),  # Ctrl+1
             BrowserControlAction.switchTab2: ([VK_CONTROL], 0x32),  # Ctrl+2
@@ -343,21 +324,6 @@ class ActionEngine:
                 self.tap_key(m)
 
     # -------------------------------------------------------------------------
-    # OBS & Discord Integration
-    # -------------------------------------------------------------------------
-    def perform_obs_action(self, action_name: str):
-        logger.info(f"OBS action: {action_name}")
-        # Could trigger hotkey or connect to OBS WebSocket v5 port 4455
-
-    def perform_discord_action(self, action_name: str):
-        logger.info(f"Discord action: {action_name}")
-        if IS_WINDOWS:
-            try:
-                os.startfile("discord://")
-            except Exception as e:
-                logger.debug(f"Discord protocol launch failed: {e}")
-
-    # -------------------------------------------------------------------------
     # Running Apps Enumeration
     # -------------------------------------------------------------------------
     def get_running_apps(self) -> List[Dict[str, str]]:
@@ -386,9 +352,24 @@ class ActionEngine:
                         results.append({"name": title, "bundleIdentifier": str(hwnd)})
             return True
 
-        WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)
+        WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_ssize_t)
         user32.EnumWindows(WNDENUMPROC(enum_windows_callback), 0)
         return results[:10]
+
+    @staticmethod
+    def foreground_executable():
+        if IS_WINDOWS:
+            import win32gui
+            import win32process
+            import psutil
+            hwnd = win32gui.GetForegroundWindow()
+            if hwnd:
+                try:
+                    pid = win32process.GetWindowThreadProcessId(hwnd)[1]
+                    return psutil.Process(pid).name().casefold()
+                except (OSError, psutil.Error):
+                    pass
+        return None
 
     def focus_window(self, hwnd_or_name: str):
         """Brings a window to the foreground."""

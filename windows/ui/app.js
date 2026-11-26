@@ -69,8 +69,10 @@ async function fetchState() {
     const res = await fetch("/api/state");
     if (!res.ok) return;
     const data = await res.json();
-    appState = data;
-    render();
+    if (JSON.stringify(appState) !== JSON.stringify(data)) {
+      appState = data;
+      render();
+    }
   } catch (err) {
     // Backend offline
     statusDot.className = "status-dot disconnected";
@@ -86,10 +88,12 @@ async function postApi(endpoint, body = {}) {
       body: JSON.stringify(body),
     });
     const data = await res.json();
+    if (data.error) { alert(data.error); return false; }
     if (data.state) {
       appState = data.state;
       render();
     }
+    return true;
   } catch (err) {
     console.error("API error:", err);
   }
@@ -108,6 +112,7 @@ function render() {
 function renderConnection() {
   hostInfo.textContent = `Host: ${appState.computerName || "WinDeck PC"}`;
 
+  document.getElementById("disconnectDevice").style.display = appState.status === "connected" ? "" : "none";
   if (appState.status === "connected") {
     statusDot.className = "status-dot connected";
     statusText.textContent = "Connected";
@@ -126,6 +131,9 @@ function renderConnection() {
     deviceName.textContent = "No phone connected";
   }
 
+  document.getElementById("phoneScreenStatus").textContent = statusText.textContent;
+  document.querySelector(".pill-dot").style.backgroundColor = appState.status === "connected" ? "var(--accent-green)" : "var(--text-secondary)";
+
   // Pairing banner
   if (appState.pendingApproval) {
     pairingBanner.style.display = "flex";
@@ -135,18 +143,35 @@ function renderConnection() {
   }
 
   // Toggles
+  document.getElementById("chkOBS").checked = appState.showOBS;
+  document.getElementById("chkDiscord").checked = appState.showDiscord;
+  document.getElementById("obsStatus").textContent = appState.obsStatus;
+  const phones = document.getElementById("trustedPhones");
+  phones.replaceChildren();
+  (appState.trustedDevices || []).forEach(phone => {
+    const row = document.createElement("p");
+    const forget = document.createElement("button");
+    forget.type = "button";
+    forget.className = "btn btn-secondary";
+    forget.textContent = "Forget";
+    forget.onclick = () => postApi("/api/forget_device", {clientId: phone.clientID});
+    row.append(phone.deviceName + " ", forget);
+    phones.append(row);
+  });
+  if (!phones.childElementCount) phones.textContent = "No paired phones";
+  document.getElementById("chkLogin").checked = appState.launchAtLogin;
   chkRunningApps.checked = appState.showRunningApps;
   chkBrowserControl.checked = appState.showBrowserControl;
 }
 
 function renderPages() {
   pagesList.innerHTML = "";
-  appState.pages.forEach((page) => {
-    const item = document.createElement("div");
+  [...appState.pages].sort((a,b) => Number(a.readOnly) - Number(b.readOnly)).forEach((page) => {
+    const item = document.createElement("button");
     item.className = `page-item ${page.id === appState.selectedPageId ? "active" : ""}`;
     item.innerHTML = `
       <span>${escapeHtml(page.name)}</span>
-      <span class="page-item-badge">P${page.pageNumber}</span>
+      <span class="page-item-badge">${page.readOnly ? "Live" : "P" + page.pageNumber}</span>
     `;
     item.addEventListener("click", () => {
       postApi("/api/select_page", { pageId: page.id });
@@ -157,7 +182,10 @@ function renderPages() {
   const activePage = appState.pages.find((p) => p.id === appState.selectedPageId) || appState.pages[0];
   if (activePage) {
     activePageTitle.textContent = activePage.name;
-    activePageBadge.textContent = `Page ${activePage.pageNumber} • 10 Slots`;
+    activePageBadge.textContent = activePage.readOnly ? "Live page" : `Page ${activePage.pageNumber} • ${appState.gridRows * 5} slots`;
+    document.getElementById("btnTriggers").disabled = activePage.readOnly;
+    btnDeletePage.disabled = btnRenamePage.disabled = btnToggleLibrary.disabled = activePage.readOnly;
+    libraryDrawer.hidden = activePage.readOnly;
   }
 }
 
@@ -166,20 +194,26 @@ function renderGrid() {
   const activePage = appState.pages.find((p) => p.id === appState.selectedPageId) || appState.pages[0];
   const tiles = activePage ? activePage.tiles : [];
 
-  for (let i = 0; i < 10; i++) {
+  const rows = appState.gridRows || 2;
+  deckGrid.style.gridTemplateRows = `repeat(${rows}, minmax(0, 1fr))`;
+  deckGrid.dataset.rows = rows;
+  selectedSlotIndex = Math.min(selectedSlotIndex, rows * 5 - 1);
+  for (let i = 0; i < rows * 5; i++) {
     const tile = tiles[i];
-    const keycap = document.createElement("div");
+    const keycap = document.createElement("button");
     keycap.className = `keycap ${tile ? "" : "empty"} ${selectedSlotIndex === i ? "selected" : ""}`;
     keycap.dataset.slot = i;
+    keycap.setAttribute("aria-label", `Slot ${i + 1}, ${tile?.customLabel || tile?.tileType?.name || tile?.tileType?.action || "Empty"}`);
 
     // Drag & Drop
-    keycap.draggable = true;
+    keycap.draggable = !activePage.readOnly;
     keycap.addEventListener("dragstart", (e) => {
       e.dataTransfer.setData("text/plain", JSON.stringify({ type: "slot", slotIndex: i }));
     });
     keycap.addEventListener("dragover", (e) => e.preventDefault());
     keycap.addEventListener("drop", (e) => {
       e.preventDefault();
+      if (activePage.readOnly) return;
       const raw = e.dataTransfer.getData("text/plain");
       if (!raw) return;
       try {
@@ -208,12 +242,19 @@ function renderGrid() {
     }
 
     keycap.addEventListener("click", () => {
+      if (activePage.readOnly) {
+        if (tile) postApi("/api/trigger_live_slot", {pageId: activePage.id, slotIndex: i});
+        return;
+      }
       selectedSlotIndex = i;
       renderGrid();
     });
 
+    keycap.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !activePage.readOnly) { e.preventDefault(); selectedSlotIndex = i; openModal(i, tile); }
+    });
     keycap.addEventListener("dblclick", () => {
-      openModal(i, tile);
+      if (!activePage.readOnly) openModal(i, tile);
     });
 
     deckGrid.appendChild(keycap);
@@ -221,6 +262,7 @@ function renderGrid() {
 }
 
 function renderLibrary() {
+  document.getElementById("addCustomTile").hidden = !["websites", "macros"].includes(activeTab);
   drawerContent.innerHTML = "";
   let items = [];
 
@@ -254,7 +296,6 @@ function renderLibrary() {
       { name: "Win + D (Desktop)", macro: "WIN+D", type: "shortcut" },
       { name: "Alt + Tab", macro: "ALT+TAB", type: "shortcut" },
       { name: "Ctrl + Shift + Esc (Task Mgr)", macro: "CTRL+SHIFT+ESC", type: "shortcut" },
-      { name: "Win + L (Lock)", macro: "WIN+L", type: "shortcut" },
     ];
   }
 
@@ -263,13 +304,13 @@ function renderLibrary() {
   const filtered = items.filter((it) => (it.name || it.action || "").toLowerCase().includes(q));
 
   filtered.forEach((it) => {
-    const el = document.createElement("div");
+    const el = document.createElement("button");
     el.className = "library-item";
     el.draggable = true;
 
     const tileType = {
       type: it.type || (activeTab === "controls" ? "systemControl" : "app"),
-      name: it.name,
+      name: it.macro || it.name,
       action: it.action,
       url: it.url,
       bundleIdentifier: it.path || it.bundleIdentifier,
@@ -320,8 +361,45 @@ function closeModal() {
 // Event Listeners
 // -----------------------------------------------------------------------------
 function setupEventListeners() {
+  document.getElementById("disconnectDevice").onclick = () => postApi("/api/disconnect_device", {clientId: appState.connectedClientID});
+  document.getElementById("chkLogin").onchange = e => postApi("/api/launch_at_login", {enabled: e.target.checked});
+  document.getElementById("btnTriggers").onclick = () => {
+    const page = appState.pages.find(p => p.id === appState.selectedPageId);
+    if (!page || page.readOnly) return;
+    const apps = prompt("Switch to this page when an app comes to the foreground. Enter executable names separated by commas.", page.triggerApps.join(", "));
+    if (apps !== null) postApi("/api/page_triggers", {pageId: page.id, apps});
+  };
+  document.getElementById("addCustomTile").onclick = () => {
+    const website = activeTab === "websites";
+    const value = prompt(website ? "Website URL" : "Keyboard shortcut (e.g. CTRL+SHIFT+S)")?.trim();
+    if (!value) return;
+    const tileType = website ? {type: "website", url: value, name: value} : {type: "shortcut", name: value};
+    postApi("/api/set_tile", {pageId: appState.selectedPageId, slotIndex: selectedSlotIndex, tileType});
+  };
+  const settings = document.getElementById("integrationSettings");
+  const port = document.getElementById("obsPort");
+  const password = document.getElementById("obsPassword");
+  const clear = document.getElementById("clearPassword");
+  document.getElementById("openIntegrations").onclick = () => {
+    port.value = appState.obsPort;
+    password.value = "";
+    clear.checked = false;
+    settings.showModal();
+  };
+  document.getElementById("closeIntegrations").onclick = () => settings.close();
+  document.getElementById("integrationForm").onsubmit = async (event) => {
+    event.preventDefault();
+    if (await postApi("/api/obs_settings", {port: Number(port.value), password: clear.checked ? "" : password.value, clearPassword: clear.checked})) {
+      password.value = "";
+      settings.close();
+    }
+  };
+  for (const name of ["OBS", "Discord"]) {
+    document.getElementById("chk" + name).onchange = event =>
+      postApi("/api/set_toggles", {["show" + name]: event.target.checked});
+  }
   btnAddPage.addEventListener("click", () => {
-    const name = prompt("Enter page name:", `Page ${appState.pages.length + 1}`);
+    const name = prompt("Enter page name:", `Page ${appState.pages.filter(p => !p.readOnly).length + 1}`);
     if (name) postApi("/api/add_page", { name });
   });
 
@@ -334,7 +412,7 @@ function setupEventListeners() {
 
   btnDeletePage.addEventListener("click", () => {
     const activePage = appState.pages.find((p) => p.id === appState.selectedPageId);
-    if (!activePage || appState.pages.length <= 1) {
+    if (!activePage || appState.pages.filter(p => !p.readOnly).length <= 1) {
       alert("Cannot delete the only remaining page.");
       return;
     }

@@ -167,11 +167,35 @@ final class DeckNetworkManager: ObservableObject {
     private var listener: NWListener?
     private var activeConnection: NWConnection?
     private var activeClientID: String?
+    private var requireApprovalOnReturn = Set<String>()
     private var pendingConnection: NWConnection?
     private var pendingClientID: String?
 
     private var restartWorkItem: DispatchWorkItem?
     private var lockStateCancellable: AnyCancellable?
+    private var integrationSubscriptions = Set<AnyCancellable>()
+    func observeIntegrations(in store: PageStore) {
+        let updates = Publishers.MergeMany([
+            store.obsMonitor.$obsPage.map { _ in () }.eraseToAnyPublisher(),
+            store.discordMonitor.$discordPage.map { _ in () }.eraseToAnyPublisher(),
+            store.$showDiscordPage.map { _ in () }.eraseToAnyPublisher(),
+            store.$showOBSPage.map { _ in () }.eraseToAnyPublisher()
+        ])
+        updates.sink { [weak self] in self?.broadcastPageUpdate() }.store(in: &integrationSubscriptions)
+        var hadCall = false
+        DiscordCalls.shared.$page.receive(on: DispatchQueue.main).sink { [weak self, weak store] page in
+            let hasCall = page != nil && DiscordCalls.shared.status == .active
+            let appeared = !hadCall && hasCall
+            hadCall = hasCall
+            guard let self, let store, store.showDiscordPage else { return }
+            self.sendAllPages()
+            if appeared, !RemoteUnlockManager.shared.isLocked {
+                if case .connected = self.status { self.send(.switchToPage(pageID: DiscordCalls.pageID)) }
+                store.selectedPageID = DiscordCalls.pageID
+            }
+        }.store(in: &integrationSubscriptions)
+    }
+
     private var frontmostAppCancellable: AnyCancellable?
     private var lastAutoSwitchedPageID: UUID?
 
@@ -253,6 +277,16 @@ final class DeckNetworkManager: ObservableObject {
             status = .disconnected
             scheduleRestart()
         }
+    }
+
+    func disconnectDevice() {
+        guard case .connected = status, let connection = activeConnection, let clientID = activeClientID else { return }
+        requireApprovalOnReturn.insert(clientID)
+        activeConnection = nil
+        activeClientID = nil
+        lastAutoSwitchedPageID = nil
+        status = .waiting
+        connection.cancel()
     }
 
     func stop() {
@@ -471,6 +505,7 @@ final class DeckNetworkManager: ObservableObject {
     }
 
     private func handleHello(clientID: String, deviceName: String, protocolVersion: Int, gridRows: Int, on connection: NWConnection) {
+        guard pendingConnection === connection else { return }
         debugLog("HELLO from \(deviceName) id=\(clientID) proto=\(protocolVersion)")
 
         onGridRowsChanged?(gridRows)
@@ -491,7 +526,7 @@ final class DeckNetworkManager: ObservableObject {
             return
         }
 
-        if TrustedDeviceStore.shared.isTrusted(clientID: clientID) {
+        if TrustedDeviceStore.shared.isTrusted(clientID: clientID), !requireApprovalOnReturn.contains(clientID) {
             TrustedDeviceStore.shared.recordConnection(clientID: clientID)
 
             // Safely promote this connection to activeConnection
@@ -521,6 +556,7 @@ final class DeckNetworkManager: ObservableObject {
 
     func approvePairing(clientID: String, deviceName: String) {
         guard case .awaitingApproval(let currentClientID, _) = status, currentClientID == clientID else { return }
+        requireApprovalOnReturn.remove(clientID)
         debugLog("Approving pairing for \(deviceName) id=\(clientID)")
         TrustedDeviceStore.shared.trust(clientID: clientID, deviceName: deviceName)
 
@@ -573,7 +609,20 @@ final class DeckNetworkManager: ObservableObject {
         }
         let pagesToSend = populatedPages.isEmpty && !pages.isEmpty ? [pages[0]] : populatedPages
         debugLog("Broadcasting \(pagesToSend.count) page(s) to client")
-        send(.pageSync(pagesToSend))
+        // Protocol v1 Android understands shortcut presentation and triggers by page ID and slot.
+        let phonePages = pagesToSend.map { original in
+            var page = original
+            page.tiles = original.tiles.map { tile in
+                guard var tile else { return nil }
+                switch tile.tileType {
+                case .obsControl, .discordControl: tile.tileType = .shortcut(name: tile.label)
+                default: break
+                }
+                return tile
+            }
+            return page
+        }
+        send(.pageSync(phonePages))
         #if DEBUG
         let end = CFAbsoluteTimeGetCurrent()
         NSLog("MacDeck: sendAllPages took \((end - start) * 1000)ms")
@@ -594,7 +643,7 @@ final class DeckNetworkManager: ObservableObject {
             let populatedPages = pages.filter { page in 
                 page.tiles.contains(where: { $0 != nil })
             }
-            let targetPage = populatedPages.first ?? pages.first
+            let targetPage = populatedPages.first { $0.id == DiscordCalls.pageID && DiscordCalls.shared.status == .active } ?? populatedPages.first ?? pages.first
             if let targetPage {
                 send(.switchToPage(pageID: targetPage.id))
             }

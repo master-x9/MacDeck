@@ -5,9 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WinDeck — Host Deck Controller</title>
   <link rel="stylesheet" href="style.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="app-container">
@@ -37,6 +34,7 @@
           <span class="status-text" id="statusText">Waiting for phone...</span>
         </div>
         <div class="device-details" id="deviceDetails">
+          <button class="btn btn-secondary" id="disconnectDevice" style="display:none">Disconnect</button>
           <span id="deviceName">No device connected</span>
           <span class="network-info" id="networkInfo">Port 62233 • Bonjour</span>
         </div>
@@ -76,6 +74,10 @@
           <input type="checkbox" id="chkBrowserControl" checked>
           <span class="toggle-slider"></span>
         </label>
+        <label class="toggle-row"><span>Discord Calls</span><input type="checkbox" id="chkDiscord"><span class="toggle-slider"></span></label>
+        <label class="toggle-row"><span>OBS Studio</span><input type="checkbox" id="chkOBS"><span class="toggle-slider"></span></label>
+        <label class="toggle-row"><span>Launch at login</span><input type="checkbox" id="chkLogin"><span class="toggle-slider"></span></label>
+        <button class="btn btn-secondary" id="openIntegrations">Host settings</button>
       </div>
 
       <div class="sidebar-footer">
@@ -91,6 +93,7 @@
           <span class="badge-pill" id="activePageBadge">Page 1 • 10 Slots</span>
         </div>
         <div class="header-actions">
+          <button class="btn btn-secondary" id="btnTriggers">App triggers</button>
           <button class="btn btn-secondary" id="btnRenamePage">Rename</button>
           <button class="btn btn-secondary" id="btnDeletePage">Delete</button>
           <button class="btn btn-primary" id="btnToggleLibrary">Tile Library</button>
@@ -117,12 +120,12 @@
           </div>
         </div>
       </div>
-    </main>
 
     <!-- TILE LIBRARY DRAWER -->
     <aside class="library-drawer" id="libraryDrawer">
       <div class="drawer-header">
         <div class="drawer-title">Tile Library</div>
+        <button class="btn btn-secondary" id="addCustomTile" hidden>Add custom</button>
         <button class="btn-icon" id="btnCloseLibrary">×</button>
       </div>
 
@@ -148,6 +151,7 @@
         Click a tile to assign to the selected slot, or drag it directly onto any slot.
       </div>
     </aside>
+    </main>
   </div>
 
   <!-- EDIT TILE MODAL -->
@@ -174,6 +178,22 @@
     </div>
   </div>
 
+  <dialog id="integrationSettings" class="modal-box">
+    <form id="integrationForm">
+      <h2>Host settings</h2>
+      <div class="form-group"><h3>OBS Studio</h3>
+        <p>Enable WebSocket Server in OBS under Tools → WebSocket Server Settings.</p>
+        <p id="obsStatus" role="status"></p>
+        <label for="obsPort">Local server port</label><input id="obsPort" type="number" min="1" max="65535" required>
+        <label for="obsPassword">OBS password</label><input id="obsPassword" type="password" placeholder="Leave blank to keep saved password">
+        <label><input type="checkbox" id="clearPassword"> Clear saved password</label>
+      </div>
+      <h3>Discord calls</h3>
+      <p>Keep the English-language Discord desktop window open. Available call controls appear on the phone when Discord exposes an incoming or active call.</p>
+      <h3>Trusted phones</h3><div id="trustedPhones"></div>
+      <div class="modal-footer"><button type="button" class="btn btn-secondary" id="closeIntegrations">Close</button><button class="btn btn-primary">Save</button></div>
+    </form>
+  </dialog>
   <script src="app.js"></script>
 </body>
 </html>

@@ -21,10 +21,7 @@
 //     @mentioned", or "a new message arrived in a channel you pinned".
 //     The Discord page's "surfaces on new activity" behavior is built on
 //     that second, honest signal.
-//   • It cannot mute/deafen your own Discord voice state. For that, set a
-//     hotkey in Discord's own Settings ▸ Keybinds and bind it to an
-//     ordinary MacDeck Shortcut tile — that already works today.
-//
+//   • Desktop call controls are provided separately by DiscordCalls.
 
 import Foundation
 import AppKit
@@ -380,6 +377,8 @@ final class DiscordControlManager: NSObject, ObservableObject {
 
     func execute(_ action: DiscordControlAction) {
         switch action {
+        case .call(let button):
+            DiscordCalls.shared.press(button)
         case .openChannel(let guildID, let channelID, _):
             // Opening the channel is itself an acknowledgment — clear the
             // "new activity" highlight for it.

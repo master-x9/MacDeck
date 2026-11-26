@@ -27,7 +27,7 @@ final class OBSControlManager: NSObject, ObservableObject {
 
     /// OBS Studio's bundle identifier.
     static let obsBundleID = "com.obsproject.obs-studio"
-    static let obsPageID = UUID(uuidString: "00000000-0000-0000-0000-000000000003")!
+    static let obsPageID = UUID(uuidString: "00000000-0000-0000-0000-000000000005")!
 
     @Published private(set) var isConnected = false
     @Published private(set) var scenes: [String] = []
@@ -128,6 +128,7 @@ final class OBSControlManager: NSObject, ObservableObject {
         reconnectWorkItem?.cancel()
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
+        session?.invalidateAndCancel()
         session = nil
         identified = false
         isConnected = false
@@ -137,6 +138,7 @@ final class OBSControlManager: NSObject, ObservableObject {
 
     private func scheduleReconnect() {
         webSocketTask = nil
+        session?.invalidateAndCancel()
         session = nil
         identified = false
         isConnected = false
@@ -155,9 +157,10 @@ final class OBSControlManager: NSObject, ObservableObject {
         guard let task = webSocketTask else { return }
         task.receive { [weak self] result in
             Task { @MainActor [weak self] in
-                guard let self, let currentTask = self.webSocketTask else { return }
+                guard let self, self.webSocketTask === task else { return }
                 switch result {
-                case .failure:
+                case .failure(let error):
+                    self.lastError = task.closeCode.rawValue == 4009 ? "OBS rejected the WebSocket password." : error.localizedDescription
                     self.scheduleReconnect()
                     return
                 case .success(let message):
@@ -173,7 +176,7 @@ final class OBSControlManager: NSObject, ObservableObject {
                 // Keep listening as long as this is still the active task
                 // (guards against a stale receive loop from a task that's
                 // already been replaced by a reconnect).
-                if self.webSocketTask === currentTask {
+                if self.webSocketTask === task {
                     self.receiveLoop()
                 }
             }
@@ -319,6 +322,8 @@ final class OBSControlManager: NSObject, ObservableObject {
         switch action {
         case .switchScene(let name):
             sendRequest("SetCurrentProgramScene", data: ["sceneName": name])
+        case .startRecording: sendRequest("StartRecord")
+        case .stopRecording: sendRequest("StopRecord")
         case .toggleRecording:
             sendRequest("ToggleRecord")
         case .toggleStreaming:
@@ -350,13 +355,20 @@ final class OBSControlManager: NSObject, ObservableObject {
             slot += 1
         }
 
-        addTile(.obsControl(action: .toggleRecording), symbol: isRecording ? "record.circle.fill" : "record.circle", tint: .systemRed, active: isRecording)
+        addTile(.obsControl(action: isRecording ? .stopRecording : .startRecording), symbol: isRecording ? "record.circle.fill" : "record.circle", tint: .systemRed, active: isRecording)
         addTile(.obsControl(action: .toggleStreaming), symbol: "dot.radiowaves.left.and.right", tint: .systemPurple, active: isStreaming)
         addTile(.obsControl(action: .toggleReplayBuffer), symbol: "gobackward", tint: .systemOrange, active: isReplayBufferActive)
         if micInputName != nil {
             addTile(.obsControl(action: .toggleMicMute), symbol: "mic", tint: .systemGreen)
         }
 
+        // Both navigation buttons fit on the smallest phone grid, even for large collections.
+        if scenes.count > 10 - slot, let currentScene, let index = scenes.firstIndex(of: currentScene) {
+            let previous = scenes[(index + scenes.count - 1) % scenes.count]
+            let next = scenes[(index + 1) % scenes.count]
+            addTile(.obsControl(action: .switchScene(name: previous)), label: "Previous Scene", symbol: "chevron.left", tint: .systemBlue)
+            addTile(.obsControl(action: .switchScene(name: next)), label: "Next Scene", symbol: "chevron.right", tint: .systemBlue)
+        }
         for scene in scenes {
             addTile(
                 .obsControl(action: .switchScene(name: scene)),

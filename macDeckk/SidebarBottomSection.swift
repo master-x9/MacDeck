@@ -15,6 +15,7 @@ struct SidebarBottomSection: View {
     @ObservedObject private var remoteUnlock = RemoteUnlockManager.shared
     @ObservedObject private var launchAtLogin = LaunchAtLoginManager.shared
     @ObservedObject private var obsMonitor = OBSControlManager.shared
+    @ObservedObject private var calls = DiscordCalls.shared
     @ObservedObject private var discordMonitor = DiscordControlManager.shared
 
     @State private var isTrustedExpanded = false
@@ -117,12 +118,21 @@ struct SidebarBottomSection: View {
                     Text("Discord Page")
                         .font(.system(size: 12))
                     Spacer()
-                    if discordMonitor.isConnected {
+                    if calls.page != nil || discordMonitor.isConnected {
                         Circle().fill(Color.green).frame(width: 6, height: 6)
                     }
                     Toggle("", isOn: $store.showDiscordPage)
                         .toggleStyle(.switch)
                         .controlSize(.mini)
+                }
+                if store.showDiscordPage {
+                    if calls.status == .needsAccessibility {
+                        Button(calls.status.rawValue) {
+                            SystemActionEngine.shared.refreshAccessibilityPermission(prompt: true)
+                        }.font(.caption).buttonStyle(.link)
+                    } else {
+                        Text(calls.status.rawValue).font(.caption).foregroundStyle(.secondary)
+                    }
                 }
             }
             .padding(10)

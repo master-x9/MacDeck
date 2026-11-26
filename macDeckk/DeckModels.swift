@@ -103,18 +103,21 @@ enum TileType: Codable, Hashable {
 /// Settings) — see OBSControlManager.
 enum OBSControlAction: Codable, Hashable {
     case switchScene(name: String)
+    case startRecording, stopRecording
     case toggleRecording
     case toggleStreaming
     case toggleReplayBuffer
     case toggleMicMute
 
     private enum CodingKeys: String, CodingKey { case kind, name }
-    private enum Kind: String, Codable { case switchScene, toggleRecording, toggleStreaming, toggleReplayBuffer, toggleMicMute }
+    private enum Kind: String, Codable { case switchScene, startRecording, stopRecording, toggleRecording, toggleStreaming, toggleReplayBuffer, toggleMicMute }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         switch try c.decode(Kind.self, forKey: .kind) {
         case .switchScene: self = .switchScene(name: try c.decode(String.self, forKey: .name))
+        case .startRecording: self = .startRecording
+        case .stopRecording: self = .stopRecording
         case .toggleRecording: self = .toggleRecording
         case .toggleStreaming: self = .toggleStreaming
         case .toggleReplayBuffer: self = .toggleReplayBuffer
@@ -128,6 +131,8 @@ enum OBSControlAction: Codable, Hashable {
         case .switchScene(let name):
             try c.encode(Kind.switchScene, forKey: .kind)
             try c.encode(name, forKey: .name)
+        case .startRecording: try c.encode(Kind.startRecording, forKey: .kind)
+        case .stopRecording: try c.encode(Kind.stopRecording, forKey: .kind)
         case .toggleRecording: try c.encode(Kind.toggleRecording, forKey: .kind)
         case .toggleStreaming: try c.encode(Kind.toggleStreaming, forKey: .kind)
         case .toggleReplayBuffer: try c.encode(Kind.toggleReplayBuffer, forKey: .kind)
@@ -138,6 +143,8 @@ enum OBSControlAction: Codable, Hashable {
     var displayName: String {
         switch self {
         case .switchScene(let name): return name
+        case .startRecording: return "Start Recording"
+        case .stopRecording: return "Stop Recording"
         case .toggleRecording: return "Record"
         case .toggleStreaming: return "Stream"
         case .toggleReplayBuffer: return "Replay Buffer"
@@ -148,7 +155,7 @@ enum OBSControlAction: Codable, Hashable {
     var defaultSystemImageName: String {
         switch self {
         case .switchScene: return "square.stack.3d.up"
-        case .toggleRecording: return "record.circle"
+        case .toggleRecording, .startRecording, .stopRecording: return "record.circle"
         case .toggleStreaming: return "dot.radiowaves.left.and.right"
         case .toggleReplayBuffer: return "gobackward"
         case .toggleMicMute: return "mic"
@@ -156,23 +163,21 @@ enum OBSControlAction: Codable, Hashable {
     }
 }
 
-/// Actions for the auto-generated Discord page. `openChannel` opens the
-/// Discord desktop app straight to a guild/channel via its `discord://`
-/// URL scheme — see DiscordControlManager for what it can and can't see
-/// (bots can't enumerate a user's personal DM list, and can't touch a
-/// human's own mute/deafen state; those are Discord platform restrictions,
-/// not limitations of this app. For mute/deafen/push-to-talk, bind a
-/// Shortcut tile to whatever hotkey you've set in Discord's own
-/// Settings ▸ Keybinds — that already works today with no new code).
+/// Pinned bot channels and the local desktop client’s call controls.
 enum DiscordControlAction: Codable, Hashable {
     case openChannel(guildID: String, channelID: String, isDM: Bool)
 
-    private enum CodingKeys: String, CodingKey { case kind, guildID, channelID, isDM }
-    private enum Kind: String, Codable { case openChannel }
+    case call(DiscordCallButton)
+
+    private enum CodingKeys: String, CodingKey { case kind, guildID, channelID, isDM, button }
+    private enum Kind: String, Codable { case openChannel, call }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        _ = try c.decode(Kind.self, forKey: .kind)
+        if try c.decode(Kind.self, forKey: .kind) == .call {
+            self = .call(try c.decode(DiscordCallButton.self, forKey: .button))
+            return
+        }
         self = .openChannel(
             guildID: try c.decode(String.self, forKey: .guildID),
             channelID: try c.decode(String.self, forKey: .channelID),
@@ -182,6 +187,11 @@ enum DiscordControlAction: Codable, Hashable {
 
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
+        if case .call(let button) = self {
+            try c.encode(Kind.call, forKey: .kind)
+            try c.encode(button, forKey: .button)
+            return
+        }
         guard case .openChannel(let guildID, let channelID, let isDM) = self else { return }
         try c.encode(Kind.openChannel, forKey: .kind)
         try c.encode(guildID, forKey: .guildID)
@@ -189,8 +199,12 @@ enum DiscordControlAction: Codable, Hashable {
         try c.encode(isDM, forKey: .isDM)
     }
 
-    var displayName: String { "Open" }
+    var displayName: String {
+        if case .call(let button) = self { return button.label }
+        return "Open"
+    }
     var defaultSystemImageName: String {
+        if case .call(let button) = self { return button.symbol }
         guard case .openChannel(_, _, let isDM) = self else { return "number" }
         return isDM ? "person.circle" : "number"
     }
