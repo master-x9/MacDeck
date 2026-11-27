@@ -17,8 +17,8 @@ The Android companion also pairs with the Windows host. The desktop hosts includ
 | Device | Download | Install |
 | --- | --- | --- |
 | Mac (Apple silicon, macOS 26.5+) | [Download MacDeck.dmg](https://github.com/master-x9/MacDeck/releases/latest/download/MacDeck.dmg) | Open the disk image, copy MacDeck to Applications, and launch it. Allow local network access if prompted. |
-| Windows x64 | [Download WinDeck for Windows x64](https://github.com/master-x9/MacDeck/releases/latest/download/WinDeck-Windows-x64.zip) | Extract the portable ZIP and open **WinDeck.exe**, or run the host from source. |
-| Android phone | [Download MacDeck.apk](https://github.com/master-x9/MacDeck/releases/latest/download/MacDeck.apk) | Open the APK from Downloads and tap **Install**. If Android prompts you, allow installation from the app that opened the file. You can switch that permission off afterward. |
+| Windows x64 | [Download WinDeck for Windows x64](https://github.com/master-x9/MacDeck/releases/latest/download/WinDeck-Setup.exe) | Run **WinDeck-Setup.exe** once. Future versions appear in the app with release notes. |
+| Android phone | [Download MacDeck.apk](https://github.com/master-x9/MacDeck/releases/download/2026.11.27.2/MacDeck.apk) | Open the APK from Downloads and tap **Install**. If Android prompts you, allow installation from the app that opened the file. You can switch that permission off afterward. |
 
 Install the Android app and the host for your computer, then follow [Pair your phone and try a tile](#pair-your-phone-and-try-a-tile). You can also find all downloads on the [GitHub release page](https://github.com/master-x9/MacDeck/releases/latest).
 

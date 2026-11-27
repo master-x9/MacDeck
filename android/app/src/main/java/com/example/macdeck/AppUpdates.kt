@@ -19,7 +19,7 @@ import java.security.MessageDigest
 private const val RELEASES = "https://github.com/master-x9/MacDeck/releases/"
 
 @Suppress("DEPRECATION")
-internal fun MainActivity.checkForAppUpdate() = lifecycleScope.launch {
+internal fun MainActivity.checkForAppUpdate(): kotlinx.coroutines.Job = lifecycleScope.launch {
     val release = withContext(Dispatchers.IO) {
         runCatching {
             val connection = URL(RELEASES + "latest/download/android-update.json").openConnection()
