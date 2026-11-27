@@ -6,6 +6,11 @@ Base64 PNG icon payload dictionary and favicon fetcher.
 import urllib.request
 import urllib.parse
 import base64
+import ssl
+import certifi
+from functools import lru_cache
+from io import BytesIO
+from PIL import Image
 from typing import Optional
 
 ICONS = {
@@ -40,14 +45,34 @@ ICONS = {
 
 
 _favicon_cache = {}
+_https_context = ssl.create_default_context()
+_https_context.load_verify_locations(cafile=certifi.where())
 
+@lru_cache(maxsize=128)
 def get_icon(action_or_type: str) -> Optional[str]:
     """Resolves a base64 icon string for a given action or tile type."""
     if action_or_type in ICONS:
-        return ICONS[action_or_type]
+        with Image.open(BytesIO(base64.b64decode(ICONS[action_or_type]))) as source:
+            image = source.convert("RGBA")
+            bounds = image.getbbox()
+            if bounds:
+                image = image.crop(bounds)
+            image.thumbnail((96, 96), Image.Resampling.LANCZOS)
+            canvas = Image.new("RGBA", (128, 128))
+            canvas.paste(image, ((128-image.width)//2, (128-image.height)//2))
+            output = BytesIO()
+            canvas.save(output, format="PNG")
+        return base64.b64encode(output.getvalue()).decode("ascii")
     
     # Aliases
     aliases = {
+        "StartStream": "browserControl",
+        "StopStream": "browserControl",
+        "StartRecord": "screenRecord",
+        "StopRecord": "screenRecord",
+        "ToggleReplayBuffer": "playPause",
+        "ToggleInputMute": "mute",
+        "SetCurrentProgramScene": "desktop",
         "switchScene": "obsControl",
         "toggleRecording": "screenRecord",
         "toggleStreaming": "obsControl",
@@ -67,30 +92,43 @@ def get_icon(action_or_type: str) -> Optional[str]:
     }
     alias = aliases.get(action_or_type)
     if alias and alias in ICONS:
-        return ICONS[alias]
-    return ICONS.get("app")
+        return get_icon(alias)
+    return get_icon("app")
 
 def fetch_favicon(url: str) -> Optional[str]:
-    """Fetches a 128x128 favicon from Google S2 Favicon API and returns base64 PNG."""
+    """Fetch a website icon and normalize ICO/JPEG/PNG responses for the phone."""
     if not url:
         return None
     try:
-        parsed = urllib.parse.urlparse(url)
-        domain = parsed.netloc or parsed.path.split("/")[0]
-        if not domain:
+        parsed = urllib.parse.urlparse(url if "://" in url else "https://" + url)
+        domain = parsed.hostname
+        if not domain or parsed.scheme not in ("http", "https"):
             return None
-        domain = domain.lower().replace("www.", "")
+        domain = domain.lower().encode("idna").decode("ascii")
         if domain in _favicon_cache:
             return _favicon_cache[domain]
         
-        req_url = f"https://www.google.com/s2/favicons?domain={urllib.parse.quote(domain)}&sz=128"
-        req = urllib.request.Request(req_url, headers={"User-Agent": "WinDeck/1.0"})
-        with urllib.request.urlopen(req, timeout=3.0) as resp:
-            data = resp.read()
-            if data and len(data) > 100:
-                b64 = base64.b64encode(data).decode("ascii")
+        host = urllib.parse.quote(domain, safe="")
+        for req_url in (f"https://www.google.com/s2/favicons?domain={host}&sz=128",
+                        f"https://icons.duckduckgo.com/ip3/{host}.ico"):
+            try:
+                req = urllib.request.Request(req_url, headers={"User-Agent": "WinDeck/1.0"})
+                with urllib.request.urlopen(req, timeout=3.0, context=_https_context) as resp:
+                    data = resp.read(512 * 1024 + 1)
+                if len(data) > 512 * 1024:
+                    continue
+                with Image.open(BytesIO(data)) as source:
+                    if source.width * source.height > 1024 * 1024:
+                        continue
+                    image = source.convert("RGBA")
+                    image.thumbnail((128, 128))
+                    output = BytesIO()
+                    image.save(output, format="PNG")
+                b64 = base64.b64encode(output.getvalue()).decode("ascii")
                 _favicon_cache[domain] = b64
                 return b64
+            except (OSError, ValueError):
+                continue
     except Exception:
         pass
     return None

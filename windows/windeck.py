@@ -13,6 +13,7 @@ import logging
 import threading
 import subprocess
 import webbrowser
+import time
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
 
@@ -31,6 +32,7 @@ if current_dir not in sys.path:
 
 from models import DeckTile, TileType, SystemControlAction
 from icons import get_icon, fetch_favicon, ICONS
+from app_icons import get_app_icon
 from action_engine import ActionEngine, BROWSERS
 from page_store import PageStore, supported, BROWSER_PAGE_ID
 from integrations import OBS, OBS_ID, CALL_ID, discord_call, monitor
@@ -102,6 +104,8 @@ class WinDeckHttpServer(HTTPServer):
         ctx = self.ctx
         controls = []
         for act in SystemControlAction:
+            if act.value.startswith("kbBrightness") and not ctx.action_engine.keyboard_backlight.state["supported"]:
+                continue
             controls.append({
                 "name": act.display_name,
                 "action": act.value,
@@ -110,10 +114,7 @@ class WinDeckHttpServer(HTTPServer):
                 "iconData": get_icon(act.value),
             })
 
-        installed_apps = ctx.installed_apps
-        for app in installed_apps:
-            app["iconData"] = get_icon("app")
-            app["type"] = "app"
+        installed_apps = [dict(app, type="app") for app in ctx.installed_apps]
 
         return {
             "pages": [dict(p.to_dict(), readOnly=p.pageNumber <= 0) for p in ctx.page_store.all_pages],
@@ -134,7 +135,9 @@ class WinDeckHttpServer(HTTPServer):
             "showRunningApps": ctx.page_store.show_running_apps_page,
             "showBrowserControl": ctx.page_store.show_browser_control_page,
             "controlsLibrary": controls,
-            "installedApps": installed_apps[:40],
+            "installedApps": installed_apps,
+            "websitesLibrary": ctx.websites,
+            "keyboardBacklight": ctx.action_engine.keyboard_backlight.state,
         }
 
     def handle_api(self, path: str, body: dict) -> dict:
@@ -148,6 +151,11 @@ class WinDeckHttpServer(HTTPServer):
             return {"success": True}
         if path == "/api/support":
             return {"success": webbrowser.open("https://macdeck.fun/?support=1")}
+        if path == "/api/sync":
+            ps.notify_changes()
+            if ctx.network.status == "connected":
+                ctx.network.switch_to_page(ps.selected_page_id)
+            return {"success": True}
 
         if path == "/api/select_page":
             if not any(p.id == body.get("pageId") for p in ps.all_pages):
@@ -179,7 +187,11 @@ class WinDeckHttpServer(HTTPServer):
             tt = TileType.from_dict(tile_type_data)
             if not supported(tt) or tt.type not in ("app", "shortcut", "website", "systemControl", "browserControl"):
                 return {"success": False, "error": "Unavailable on Windows"}
+            if (tt.action or "").startswith("kbBrightness") and not ctx.action_engine.keyboard_backlight.state["supported"]:
+                return {"success": False, "error": ctx.action_engine.keyboard_backlight.state["message"]}
             icon = get_icon(tt.action or tt.type)
+            if tt.type == "app":
+                icon = get_app_icon(tt.bundleIdentifier, tt.name or "App")
 
             # Check if website favicon needs fetching
             if tt.type == "website" and tt.url:
@@ -334,6 +346,10 @@ class WinDeckApp:
         self.network = NetworkManager(page_store=self.page_store, action_engine=self.action_engine)
         self.launch_at_login = launch_setting()
         self.installed_apps = self.action_engine.discover_installed_apps()
+        self.websites = [dict(name=name, url=url, type="website", iconData=get_icon("website")) for name, url in
+                         [("Google", "https://google.com"), ("YouTube", "https://youtube.com"),
+                          ("GitHub", "https://github.com"), ("Instagram", "https://instagram.com"),
+                          ("Reddit", "https://reddit.com")]]
         self.obs = OBS(self.page_store.obs_port, read_obs_password())
         self.network.obs = self.obs
         self.loop = asyncio.new_event_loop()
@@ -343,6 +359,25 @@ class WinDeckApp:
         self.window = None
         self.http_server = None
         self.tray_icon = None
+
+    def refresh_artwork(self):
+        for app in self.installed_apps:
+            app["iconData"] = get_app_icon(app["path"], app["name"])
+        for website in self.websites:
+            website["iconData"] = fetch_favicon(website["url"]) or get_icon("website")
+        # Repair artwork in existing decks as well as newly assigned tiles.
+        for page in list(self.page_store.pages):
+            for tile in list(page.tiles):
+                if not tile:
+                    continue
+                kind = tile.tileType
+                if kind.type == "app":
+                    tile.iconData = get_app_icon(kind.bundleIdentifier, kind.name or "App")
+                elif kind.type == "website":
+                    tile.iconData = fetch_favicon(kind.url) or tile.iconData or get_icon("website")
+                else:
+                    tile.iconData = get_icon(kind.action or kind.type)
+        self.page_store.notify_changes()
 
     def start_http_server(self):
         try:
@@ -411,7 +446,11 @@ class WinDeckApp:
     async def refresh_windows(self):
         previous_target = None
         had_call = False
+        last_keyboard_check = -30
         while True:
+            if time.monotonic() - last_keyboard_check >= 30:
+                await self.action_engine.keyboard_backlight.refresh()
+                last_keyboard_check = time.monotonic()
             self.page_store.refresh_running_apps()
             foreground = self.action_engine.foreground_executable()
             self.page_store.set_browser_active(foreground in BROWSERS)
@@ -437,6 +476,7 @@ class WinDeckApp:
         self.start_http_server()
         if self.http_server is None:
             return
+        threading.Thread(target=self.refresh_artwork, daemon=True).start()
         thread = threading.Thread(target=self.loop.run_until_complete, args=(self.serve(),))
         thread.start()
         self.start_system_tray()
@@ -448,8 +488,8 @@ class WinDeckApp:
                 url = f"http://localhost:{HTTP_PORT}"
                 try:
                     import webview
-                    self.window = webview.create_window("WinDeck", url, width=1000, height=760,
-                                                        min_size=(860, 620), background_color="#151517")
+                    self.window = webview.create_window("WinDeck", url, width=1280, height=900,
+                                                        min_size=(860, 620), background_color="#191919")
                     webview.start()  # WebView2 requires the main thread.
                     self.window = None
                     if not self.tray_icon:

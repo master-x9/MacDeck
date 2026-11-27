@@ -29,7 +29,7 @@ if "%BUILD_CHOICE%"=="" set BUILD_CHOICE=1
 if "%BUILD_CHOICE%"=="2" (
     echo [3/3] Building folder bundle...
     python -m PyInstaller --noconfirm --onedir --windowed ^
-        --collect-all pywinauto ^
+        --collect-submodules winrt --collect-all pywinauto ^
         --hidden-import websockets.asyncio.server ^
         --icon "windeck.ico" ^
         --add-data "ui;ui" ^
@@ -40,7 +40,7 @@ if "%BUILD_CHOICE%"=="2" (
 ) else (
     echo [3/3] Building single-file portable WinDeck.exe...
     python -m PyInstaller --noconfirm --onefile --windowed ^
-        --collect-all pywinauto ^
+        --collect-submodules winrt --collect-all pywinauto ^
         --hidden-import websockets.asyncio.server ^
         --icon "windeck.ico" ^
         --add-data "ui;ui" ^

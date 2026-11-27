@@ -1,12 +1,12 @@
-name: Build update packages
+name: Build Windows Beta
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: WinDeck semantic version
+        description: Windows beta version (for example 1.2.3-beta.1)
         required: true
       notes:
-        description: Release notes shown in WinDeck
+        description: Beta release notes
         required: true
 permissions:
   contents: read
@@ -21,7 +21,7 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - name: Package WinDeck
+      - name: Test and package Windows Beta
         shell: pwsh
         env:
           RELEASE_VERSION: ${{ inputs.version }}
@@ -33,21 +33,6 @@ jobs:
           ./release/windows.ps1 -Version $env:RELEASE_VERSION -Notes notes.md
       - uses: actions/upload-artifact@v4
         with:
-          name: WinDeck-update-packages
+          name: WinDeck-Windows-Beta
           path: release/out/windows/
-          if-no-files-found: error
-  android:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '25'
-      - run: bash gradlew :app:assembleRelease
-        working-directory: android
-      - uses: actions/upload-artifact@v4
-        with:
-          name: MacDeck-Android-for-signing
-          path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error

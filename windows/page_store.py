@@ -239,7 +239,7 @@ class PageStore:
                     slotIndex=idx,
                     tileType=TileType(type="app", name=app["name"], bundleIdentifier=app["bundleIdentifier"]),
                     customLabel=app["name"][:12],
-                    iconData=get_icon("app"),
+                    iconData=app.get("iconData") or get_icon("app"),
                 )
         return DeckPage(
             id=RUNNING_APPS_PAGE_ID,

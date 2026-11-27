@@ -3,159 +3,94 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WinDeck — Host Deck Controller</title>
+  <title>WinDeck — MacDeck for Windows</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div class="app-container">
-    <!-- SIDEBAR -->
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <div class="brand">
-          <div class="brand-icon">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
-              <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
-              <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
-              <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
-            </svg>
-          </div>
-          <div>
-            <div class="brand-title">WinDeck</div>
-            <div class="brand-subtitle">PC Controller Host</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- CONNECTION STATUS CARD -->
+    <aside class="sidebar" aria-label="Pages and host settings">
+      <div class="sidebar-header"><div class="brand"><span class="brand-icon" data-ui-icon="grid"></span>WinDeck</div></div>
       <div class="connection-card" id="connectionCard">
-        <div class="status-indicator">
-          <span class="status-dot" id="statusDot"></span>
-          <span class="status-text" id="statusText">Waiting for phone...</span>
-        </div>
+        <div class="connection-heading"><span data-ui-icon="phone"></span><span>MacDeck Client</span><span class="status-dot" id="statusDot"></span></div>
+        <div class="status-text" id="statusText">Waiting for connection…</div>
         <div class="device-details" id="deviceDetails">
+          <span id="deviceName"></span><span id="networkInfo">Port 62233 · Bonjour</span>
           <button class="btn btn-secondary" id="disconnectDevice" style="display:none">Disconnect</button>
-          <span id="deviceName">No device connected</span>
-          <span class="network-info" id="networkInfo">Port 62233 • Bonjour</span>
         </div>
       </div>
-
-      <!-- PAIRING APPROVAL BANNER -->
-      <div class="pairing-banner" id="pairingBanner" style="display: none;">
-        <div class="pairing-title">Pairing Request</div>
+      <button class="sidebar-link" id="checkUpdates"><span data-ui-icon="sync"></span>Check for Updates…<small id="appVersion"></small></button>
+      <div class="pairing-banner" id="pairingBanner" style="display:none" role="status">
+        <div class="pairing-title">Pairing request</div>
         <div class="pairing-desc"><span id="pairingDeviceName">Device</span> wants to connect</div>
-        <div class="pairing-actions">
-          <button class="btn btn-approve" id="btnApprovePairing">Approve</button>
-          <button class="btn btn-deny" id="btnDenyPairing">Deny</button>
+        <div class="pairing-actions"><button class="btn btn-approve" id="btnApprovePairing">Allow</button><button class="btn btn-deny" id="btnDenyPairing">Deny</button></div>
+      </div>
+      <div class="section-label"><span>PAGES</span><button class="btn-icon" id="btnAddPage" aria-label="Add page">+</button></div>
+      <div class="pages-list" id="pagesList"></div>
+      <div class="section-label" id="dynamicPagesLabel">DYNAMIC STREAMS</div>
+      <div class="pages-list dynamic-pages" id="dynamicPagesList"></div>
+      <div class="sidebar-bottom">
+        <div class="section-label">STREAM &amp; CONNECTION</div>
+        <div class="toggles-list">
+          <label class="toggle-row"><span><span data-ui-icon="power"></span>Start at Login</span><input type="checkbox" id="chkLogin"><span class="toggle-slider"></span></label>
+          <label class="toggle-row"><span><span data-ui-icon="apps"></span>Running Apps Page</span><input type="checkbox" id="chkRunningApps"><span class="toggle-slider"></span></label>
+          <label class="toggle-row"><span><span data-ui-icon="globe"></span>Browser Control</span><input type="checkbox" id="chkBrowserControl"><span class="toggle-slider"></span></label>
+          <label class="toggle-row"><span><span data-ui-icon="record"></span>OBS Page</span><input type="checkbox" id="chkOBS"><span class="toggle-slider"></span></label>
+          <label class="toggle-row"><span><span data-ui-icon="chat"></span>Discord Page</span><input type="checkbox" id="chkDiscord"><span class="toggle-slider"></span></label>
         </div>
-      </div>
-
-      <!-- PAGES SECTION -->
-      <div class="section-label">
-        <span>YOUR PAGES</span>
-        <button class="btn-icon" id="btnAddPage" title="Add New Page">+</button>
-      </div>
-      <div class="pages-list" id="pagesList">
-        <!-- Injected via JS -->
-      </div>
-
-      <!-- DYNAMIC PAGES TOGGLES -->
-      <div class="section-label">
-        <span>AUTO-PAGES</span>
-      </div>
-      <div class="toggles-list">
-        <label class="toggle-row">
-          <span>Running Apps Page</span>
-          <input type="checkbox" id="chkRunningApps" checked>
-          <span class="toggle-slider"></span>
-        </label>
-        <label class="toggle-row">
-          <span>Browser Control Page</span>
-          <input type="checkbox" id="chkBrowserControl" checked>
-          <span class="toggle-slider"></span>
-        </label>
-        <label class="toggle-row"><span>Discord Calls</span><input type="checkbox" id="chkDiscord"><span class="toggle-slider"></span></label>
-        <label class="toggle-row"><span>OBS Studio</span><input type="checkbox" id="chkOBS"><span class="toggle-slider"></span></label>
-        <label class="toggle-row"><span>Launch at login</span><input type="checkbox" id="chkLogin"><span class="toggle-slider"></span></label>
-        <button class="btn btn-secondary" id="openIntegrations">Host settings</button>
-      </div>
-
-      <div class="sidebar-footer">
-        <button type="button" class="btn btn-secondary" id="checkUpdates">Check for Updates…</button>
-        <button type="button" class="btn btn-secondary" id="supportMacDeck">Support MacDeck</button>
-        <div class="footer-meta" id="hostInfo">Host: WinDeck-PC</div>
+        <button class="sidebar-link" id="openIntegrations"><span data-ui-icon="settings"></span>Configure OBS &amp; Discord…</button>
+        <button class="sidebar-link" id="supportMacDeck"><span data-ui-icon="heart"></span>Support MacDeck</button>
+        <div class="sidebar-footer" id="hostInfo">WinDeck · Windows Beta</div>
       </div>
     </aside>
-
-    <!-- MAIN CANVAS -->
     <main class="main-content">
+      <div class="window-title">WinDeck <span class="beta-badge">Beta</span></div>
       <header class="canvas-header">
-        <div class="page-meta">
-          <h1 id="activePageTitle">Main</h1>
-          <span class="badge-pill" id="activePageBadge">Page 1 • 10 Slots</span>
-        </div>
+        <div class="page-meta"><div class="page-heading"><h1 id="activePageTitle">Main</h1><button class="btn-icon" id="btnRenamePage" aria-label="Rename page"><span data-ui-icon="edit"></span></button></div><span class="badge-pill" id="activePageBadge">Drag controls below onto slots</span></div>
         <div class="header-actions">
-          <button class="btn btn-secondary" id="btnTriggers">App triggers</button>
-          <button class="btn btn-secondary" id="btnRenamePage">Rename</button>
-          <button class="btn btn-secondary" id="btnDeletePage">Delete</button>
-          <button class="btn btn-primary" id="btnToggleLibrary">Tile Library</button>
+          <div class="connection-pill" id="connectionPill"><span class="pill-dot"></span><span id="headerConnectionStatus">Searching for Phone…</span></div>
+          <button class="btn btn-primary" id="btnSync"><span data-ui-icon="sync"></span>Sync to Phone</button>
+          <details class="page-options"><summary aria-label="Page options">•••</summary><div class="page-options-menu"><button class="sidebar-link" id="btnTriggers">App triggers</button><button class="sidebar-link" id="btnToggleLibrary">Show / hide library</button><button class="sidebar-link" id="btnDeletePage">Delete page</button></div></details>
         </div>
       </header>
-
-      <!-- HARDWARE PHONE SCREEN PREVIEW -->
       <div class="phone-canvas-wrapper">
-        <div class="phone-frame">
-          <div class="phone-top-bar">
-            <div class="phone-speaker"></div>
-            <div class="phone-camera"></div>
+        <div class="phone-frame"><div class="phone-camera"></div><div class="phone-screen">
+          <div class="deck-grid" id="deckGrid" aria-label="Phone deck slots"></div>
+          <div class="phone-footer"><div class="phone-status-pill"><span class="pill-dot"></span><span id="phoneScreenStatus">Deck</span></div><div class="phone-pagination" id="phonePagination" aria-hidden="true"></div></div>
+        </div></div>
+      </div>
+      <section class="library-drawer" id="libraryDrawer" aria-label="Tile library">
+        <div class="drawer-header">
+          <div class="drawer-tabs" role="tablist" aria-label="Tile categories">
+            <button class="tab-btn active" id="tab-controls" role="tab" aria-selected="true" aria-controls="drawerContent" data-tab="controls"><span data-ui-icon="controls"></span>Controls</button>
+            <button class="tab-btn" id="tab-apps" role="tab" aria-selected="false" aria-controls="drawerContent" data-tab="apps"><span data-ui-icon="grid"></span>Apps</button>
+            <button class="tab-btn" id="tab-shortcuts" role="tab" aria-selected="false" aria-controls="drawerContent" data-tab="shortcuts"><span data-ui-icon="bolt"></span>Shortcuts</button>
+            <button class="tab-btn" id="tab-websites" role="tab" aria-selected="false" aria-controls="drawerContent" data-tab="websites"><span data-ui-icon="globe"></span>Websites</button>
+            <button class="tab-btn" id="tab-setup" role="tab" aria-selected="false" aria-controls="setupPanel" data-tab="setup">Setup</button>
           </div>
-          <div class="phone-screen">
-            <div class="phone-status-pill">
-              <span class="pill-dot"></span>
-              <span id="phoneScreenStatus">Connected</span>
-            </div>
-
-            <!-- 2x5 GRID OF TACTILE TILES -->
-            <div class="deck-grid" id="deckGrid">
-              <!-- Injected via JS: 10 slot buttons -->
-            </div>
+          <div class="search-bar" id="librarySearchBar" hidden><input type="text" id="librarySearch" placeholder="Filter items…" aria-label="Filter library items"></div>
+          <button class="btn btn-secondary" id="addCustomTile" hidden>Add website</button>
+        </div>
+        <div class="drawer-content" id="drawerContent" role="tabpanel" aria-labelledby="tab-controls"></div>
+        <div class="setup-panel" id="setupPanel" role="tabpanel" aria-labelledby="tab-setup" hidden>
+          <form class="setup-card" id="shortcutForm">
+            <div class="setup-card-heading"><h2>Custom Key Combo / Macro</h2><p>Assign to the selected slot</p></div>
+            <div class="modifier-keys" aria-label="Shortcut modifiers"><button type="button" data-modifier="WIN" aria-pressed="false">⊞ Win</button><button type="button" data-modifier="ALT" aria-pressed="false">Alt</button><button type="button" data-modifier="CTRL" aria-pressed="false">Ctrl</button><button type="button" data-modifier="SHIFT" aria-pressed="false">Shift</button></div>
+            <label class="field-label" for="shortcutInput">Shortcut key</label>
+            <div class="setup-form-row"><input type="text" id="shortcutInput" placeholder="Click and press a shortcut key" autocomplete="off" spellcheck="false"><button class="btn btn-primary" id="assignShortcut" disabled>Assign to Slot</button></div>
+            <p>Use Windows keys here. System-reserved combinations may need to be entered using the modifier buttons.</p>
+          </form>
+          <div class="setup-details">
+            <div class="setup-card"><span data-ui-icon="keyboard"></span><div><h2>Keyboard lighting</h2><p id="keyboardStatus">Checking keyboard-light support…</p><p id="keyboardSupportedNote" hidden>Brightness controls use a white backlight.</p></div></div>
+            <div class="setup-card"><span class="service-icon" data-ui-icon="broadcast"></span><div><h2>Bonjour Service</h2><p id="bonjourStatus">Ready for connections</p></div></div>
           </div>
         </div>
-      </div>
-
-    <!-- TILE LIBRARY DRAWER -->
-    <aside class="library-drawer" id="libraryDrawer">
-      <div class="drawer-header">
-        <div class="drawer-title">Tile Library</div>
-        <button class="btn btn-secondary" id="addCustomTile" hidden>Add custom</button>
-        <button class="btn-icon" id="btnCloseLibrary">×</button>
-      </div>
-
-      <div class="drawer-tabs">
-        <button class="tab-btn active" data-tab="controls">Controls</button>
-        <button class="tab-btn" data-tab="apps">Apps</button>
-        <button class="tab-btn" data-tab="websites">Web</button>
-        <button class="tab-btn" data-tab="browser">Browser</button>
-        <button class="tab-btn" data-tab="macros">Macros</button>
-      </div>
-
-      <!-- SEARCH INPUT -->
-      <div class="search-bar">
-        <input type="text" id="librarySearch" placeholder="Search actions & apps...">
-      </div>
-
-      <!-- TAB CONTENTS -->
-      <div class="drawer-content" id="drawerContent">
-        <!-- Injected via JS based on active tab -->
-      </div>
-
-      <div class="drawer-tip">
-        Click a tile to assign to the selected slot, or drag it directly onto any slot.
-      </div>
-    </aside>
+        <div class="drawer-tip" id="drawerTip">Select a slot, then click a control to assign it. You can also drag controls onto slots.</div>
+      </section>
     </main>
   </div>
-
+  <div class="toast" id="toast" role="status" hidden></div>
+  <dialog class="modal-box" id="websiteDialog"><form id="websiteForm"><h2>Add a website</h2><div class="form-group"><label for="websiteName">Name</label><input id="websiteName" required maxlength="80" placeholder="My website"><label for="websiteUrl">Website URL</label><input id="websiteUrl" required type="url" placeholder="https://example.com"></div><div class="modal-footer"><button type="button" class="btn btn-secondary" id="cancelWebsite">Cancel</button><button class="btn btn-primary">Assign to Slot</button></div></form></dialog>
   <!-- EDIT TILE MODAL -->
   <div class="modal-overlay" id="editModal" style="display: none;">
     <div class="modal-box">

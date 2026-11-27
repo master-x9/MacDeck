@@ -13,6 +13,8 @@ import json
 class SystemControlAction(str, Enum):
     brightnessUp = "brightnessUp"
     brightnessDown = "brightnessDown"
+    kbBrightnessUp = "kbBrightnessUp"
+    kbBrightnessDown = "kbBrightnessDown"
     playPause = "playPause"
     nextTrack = "nextTrack"
     previousTrack = "previousTrack"
@@ -33,6 +35,8 @@ class SystemControlAction(str, Enum):
         names = {
             "brightnessUp": "Bright",
             "brightnessDown": "Dim",
+            "kbBrightnessUp": "KB Bright",
+            "kbBrightnessDown": "KB Dim",
             "playPause": "Play",
             "nextTrack": "Next",
             "previousTrack": "Previous",

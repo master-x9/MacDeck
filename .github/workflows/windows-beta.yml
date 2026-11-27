@@ -1,0 +1,38 @@
+name: Build Windows Beta
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Windows beta version (for example 1.2.3-beta.1)
+        required: true
+      notes:
+        description: Beta release notes
+        required: true
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Test and package Windows Beta
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_NOTES: ${{ inputs.notes }}
+        run: |
+          dotnet tool install --global vpk --version 1.2.161
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Set-Content -Path notes.md -Value $env:RELEASE_NOTES
+          ./release/windows.ps1 -Version $env:RELEASE_VERSION -Notes notes.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WinDeck-Windows-Beta
+          path: release/out/windows/
+          if-no-files-found: error

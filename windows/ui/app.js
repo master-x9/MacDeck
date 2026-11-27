@@ -42,7 +42,6 @@ const btnToggleLibrary = document.getElementById("btnToggleLibrary");
 
 const deckGrid = document.getElementById("deckGrid");
 const libraryDrawer = document.getElementById("libraryDrawer");
-const btnCloseLibrary = document.getElementById("btnCloseLibrary");
 const librarySearch = document.getElementById("librarySearch");
 const drawerContent = document.getElementById("drawerContent");
 const tabButtons = document.querySelectorAll(".tab-btn");
@@ -59,6 +58,7 @@ const btnModalClearSlot = document.getElementById("btnModalClearSlot");
 // Initialization & Polling
 // -----------------------------------------------------------------------------
 async function init() {
+  document.querySelectorAll("[data-ui-icon]").forEach(el => { el.innerHTML = uiIcon(el.dataset.uiIcon); });
   setupEventListeners();
   await fetchState();
   setInterval(fetchState, 1200); // Live poll updates
@@ -110,7 +110,8 @@ function render() {
 }
 
 function renderConnection() {
-  hostInfo.textContent = `Host: ${appState.computerName || "WinDeck PC"}${appState.appVersion ? " · v" + appState.appVersion : ""}`;
+  hostInfo.textContent = `${appState.computerName || "WinDeck PC"} · Windows Beta`;
+  document.getElementById("appVersion").textContent = appState.appVersion ? `v${appState.appVersion.split("-")[0]}` : "";
 
   document.getElementById("disconnectDevice").style.display = appState.status === "connected" ? "" : "none";
   if (appState.status === "connected") {
@@ -132,7 +133,13 @@ function renderConnection() {
   }
 
   document.getElementById("phoneScreenStatus").textContent = statusText.textContent;
-  document.querySelector(".pill-dot").style.backgroundColor = appState.status === "connected" ? "var(--accent-green)" : "var(--text-secondary)";
+  document.querySelector(".phone-status-pill .pill-dot").style.backgroundColor = appState.status === "connected" ? "var(--accent-green)" : "var(--accent-orange)";
+  document.getElementById("headerConnectionStatus").textContent = appState.status === "connected" ? "Phone connected" : "Searching for Phone…";
+  document.getElementById("connectionPill").classList.toggle("connected", appState.status === "connected");
+  document.getElementById("btnSync").disabled = appState.status !== "connected";
+  document.getElementById("keyboardStatus").textContent = appState.keyboardBacklight?.message || "Checking keyboard-light support…";
+  document.getElementById("keyboardSupportedNote").hidden = !appState.keyboardBacklight?.supported;
+  document.getElementById("bonjourStatus").textContent = appState.status === "connected" ? "Connected to your phone" : "Ready for connections";
 
   // Pairing banner
   if (appState.pendingApproval) {
@@ -165,37 +172,40 @@ function renderConnection() {
 }
 
 function renderPages() {
-  pagesList.innerHTML = "";
-  [...appState.pages].sort((a,b) => Number(a.readOnly) - Number(b.readOnly)).forEach((page) => {
+  pagesList.replaceChildren();
+  const dynamic = document.getElementById("dynamicPagesList");
+  dynamic.replaceChildren();
+  const saved = appState.pages.filter(page => !page.readOnly);
+  appState.pages.forEach(page => {
+    const count = page.tiles.filter(Boolean).length;
     const item = document.createElement("button");
     item.className = `page-item ${page.id === appState.selectedPageId ? "active" : ""}`;
-    item.innerHTML = `
-      <span>${escapeHtml(page.name)}</span>
-      <span class="page-item-badge">${page.readOnly ? "Live" : "P" + page.pageNumber}</span>
-    `;
-    item.addEventListener("click", () => {
-      postApi("/api/select_page", { pageId: page.id });
-    });
-    pagesList.appendChild(item);
+    item.setAttribute("aria-current", page.id === appState.selectedPageId ? "page" : "false");
+    const icon = page.readOnly ? uiIcon(page.name.includes("Discord") ? "chat" : page.name.includes("OBS") ? "record" : "apps") :
+      `<span class="page-grid-icon" aria-hidden="true">${Array.from({length:20}, (_,i) => `<i class="${page.tiles[i] ? "filled" : ""}"></i>`).join("")}</span>`;
+    item.innerHTML = `${icon}<span class="page-item-copy"><span class="page-name">${escapeHtml(page.name)}</span><span class="page-item-badge">${page.readOnly ? "Live page" : `${count} of 20 slots`}</span></span>`;
+    item.onclick = () => postApi("/api/select_page", {pageId:page.id});
+    (page.readOnly ? dynamic : pagesList).append(item);
   });
-
-  const activePage = appState.pages.find((p) => p.id === appState.selectedPageId) || appState.pages[0];
-  if (activePage) {
-    activePageTitle.textContent = activePage.name;
-    activePageBadge.textContent = activePage.readOnly ? "Live page" : `Page ${activePage.pageNumber} • ${appState.gridRows * 5} slots`;
-    document.getElementById("btnTriggers").disabled = activePage.readOnly;
-    btnDeletePage.disabled = btnRenamePage.disabled = btnToggleLibrary.disabled = activePage.readOnly;
-    libraryDrawer.hidden = activePage.readOnly;
-  }
+  document.getElementById("dynamicPagesLabel").hidden = !dynamic.childElementCount;
+  const page = appState.pages.find(p => p.id === appState.selectedPageId) || appState.pages[0];
+  if (!page) return;
+  activePageTitle.textContent = page.name;
+  activePageBadge.textContent = page.readOnly ? "Live controls from your computer" : `${page.tiles.filter(Boolean).length} of 20 slots configured · Drag controls below onto slots`;
+  document.getElementById("btnTriggers").disabled = page.readOnly;
+  btnDeletePage.disabled = btnRenamePage.disabled = btnToggleLibrary.disabled = page.readOnly;
+  libraryDrawer.hidden = page.readOnly;
+  document.getElementById("phonePagination").innerHTML = saved.map(p => `<i class="${p.id === page.id ? "active" : ""}"></i>`).join("");
 }
 
 function renderGrid() {
   deckGrid.innerHTML = "";
   const activePage = appState.pages.find((p) => p.id === appState.selectedPageId) || appState.pages[0];
   const tiles = activePage ? activePage.tiles : [];
+  if (!activePage) return;
 
   const rows = appState.gridRows || 2;
-  deckGrid.style.gridTemplateRows = `repeat(${rows}, minmax(0, 1fr))`;
+  deckGrid.style.gridTemplateRows = "";
   deckGrid.dataset.rows = rows;
   selectedSlotIndex = Math.min(selectedSlotIndex, rows * 5 - 1);
   for (let i = 0; i < rows * 5; i++) {
@@ -206,7 +216,7 @@ function renderGrid() {
     keycap.setAttribute("aria-label", `Slot ${i + 1}, ${tile?.customLabel || tile?.tileType?.name || tile?.tileType?.action || "Empty"}`);
 
     // Drag & Drop
-    keycap.draggable = !activePage.readOnly;
+    keycap.draggable = Boolean(tile) && !activePage?.readOnly;
     keycap.addEventListener("dragstart", (e) => {
       e.dataTransfer.setData("text/plain", JSON.stringify({ type: "slot", slotIndex: i }));
     });
@@ -227,13 +237,13 @@ function renderGrid() {
     });
 
     if (tile) {
-      const iconSrc = tile.iconData ? `data:image/png;base64,${tile.iconData}` : "";
-      const label = tile.customLabel || tile.tileType?.name || tile.tileType?.action || "Action";
+      const label = tileLabel(tile);
       keycap.innerHTML = `
         <span class="keycap-slot-num">${i + 1}</span>
-        ${iconSrc ? `<img class="keycap-icon" src="${iconSrc}" alt="icon">` : ""}
         <span class="keycap-label">${escapeHtml(label)}</span>
       `;
+      keycap.insertBefore(artwork(tile.iconData, "keycap-icon", tile.tileType?.type), keycap.querySelector(".keycap-label"));
+      keycap.title = label;
     } else {
       keycap.innerHTML = `
         <span class="keycap-slot-num">${i + 1}</span>
@@ -262,83 +272,85 @@ function renderGrid() {
 }
 
 function renderLibrary() {
-  document.getElementById("addCustomTile").hidden = !["websites", "macros"].includes(activeTab);
-  drawerContent.innerHTML = "";
-  let items = [];
-
-  if (activeTab === "controls") {
-    items = appState.controlsLibrary || [];
-  } else if (activeTab === "apps") {
-    items = appState.installedApps || [];
-  } else if (activeTab === "browser") {
-    items = [
-      { name: "Tab 1", action: "switchTab1", type: "browserControl" },
-      { name: "Tab 2", action: "switchTab2", type: "browserControl" },
-      { name: "Tab 3", action: "switchTab3", type: "browserControl" },
-      { name: "Tab 4", action: "switchTab4", type: "browserControl" },
-      { name: "Tab 5", action: "switchTab5", type: "browserControl" },
-      { name: "Back", action: "back", type: "browserControl" },
-      { name: "Forward", action: "forward", type: "browserControl" },
-      { name: "Refresh", action: "refresh", type: "browserControl" },
-      { name: "New Tab", action: "newTab", type: "browserControl" },
-      { name: "Close Tab", action: "closeTab", type: "browserControl" },
-    ];
-  } else if (activeTab === "websites") {
-    items = [
-      { name: "Google", url: "https://google.com", type: "website" },
-      { name: "YouTube", url: "https://youtube.com", type: "website" },
-      { name: "GitHub", url: "https://github.com", type: "website" },
-      { name: "Twitter / X", url: "https://x.com", type: "website" },
-      { name: "Reddit", url: "https://reddit.com", type: "website" },
-    ];
-  } else if (activeTab === "macros") {
-    items = [
-      { name: "Win + D (Desktop)", macro: "WIN+D", type: "shortcut" },
-      { name: "Alt + Tab", macro: "ALT+TAB", type: "shortcut" },
-      { name: "Ctrl + Shift + Esc (Task Mgr)", macro: "CTRL+SHIFT+ESC", type: "shortcut" },
-    ];
-  }
-
-  // Filter
-  const q = libraryFilter.toLowerCase().trim();
-  const filtered = items.filter((it) => (it.name || it.action || "").toLowerCase().includes(q));
-
-  filtered.forEach((it) => {
+  const setup = activeTab === "setup";
+  document.getElementById("setupPanel").hidden = !setup;
+  drawerContent.hidden = setup;
+  document.getElementById("drawerTip").hidden = setup;
+  document.getElementById("addCustomTile").hidden = activeTab !== "websites";
+  document.getElementById("librarySearchBar").hidden = !["apps", "shortcuts", "websites"].includes(activeTab);
+  if (setup) return;
+  drawerContent.setAttribute("aria-labelledby", `tab-${activeTab}`);
+  drawerContent.replaceChildren();
+  const shortcuts = [
+    {name:"Desktop", macro:"WIN+D"}, {name:"Switch App", macro:"ALT+TAB"},
+    {name:"Task Manager", macro:"CTRL+SHIFT+ESC"}, {name:"Copy", macro:"CTRL+C"},
+    {name:"Paste", macro:"CTRL+V"}, {name:"Undo", macro:"CTRL+Z"},
+    {name:"Save", macro:"CTRL+S"}, {name:"Find", macro:"CTRL+F"}
+  ].map(item => ({...item, type:"shortcut"}));
+  const items = activeTab === "controls" ? appState.controlsLibrary : activeTab === "apps" ? appState.installedApps :
+    activeTab === "websites" ? appState.websitesLibrary : shortcuts;
+  const q = activeTab === "controls" ? "" : libraryFilter.toLowerCase().trim();
+  const filtered = (items || []).filter(item => (item.name || item.action || "").toLowerCase().includes(q));
+  filtered.forEach(it => {
     const el = document.createElement("button");
     el.className = "library-item";
     el.draggable = true;
-
-    const tileType = {
-      type: it.type || (activeTab === "controls" ? "systemControl" : "app"),
-      name: it.macro || it.name,
-      action: it.action,
-      url: it.url,
-      bundleIdentifier: it.path || it.bundleIdentifier,
-    };
-
-    el.addEventListener("dragstart", (e) => {
-      e.dataTransfer.setData("text/plain", JSON.stringify({ type: "library", tileType }));
-    });
-
-    const iconSrc = it.iconData ? `data:image/png;base64,${it.iconData}` : "";
-    el.innerHTML = `
-      ${iconSrc ? `<img class="library-item-icon" src="${iconSrc}">` : `<div style="font-size: 20px;">⚡</div>`}
-      <span class="library-item-label">${escapeHtml(it.name || it.action || "Action")}</span>
-    `;
-
-    el.addEventListener("click", () => {
-      const activePage = appState.pages.find((p) => p.id === appState.selectedPageId) || appState.pages[0];
-      if (activePage) {
-        postApi("/api/set_tile", {
-          pageId: activePage.id,
-          slotIndex: selectedSlotIndex,
-          tileType,
-        });
+    const tileType = {type:it.type, name:it.macro || it.name, action:it.action, url:it.url, bundleIdentifier:it.path || it.bundleIdentifier};
+    el.ondragstart = event => event.dataTransfer.setData("text/plain", JSON.stringify({type:"library", tileType}));
+    el.append(artwork(it.iconData, "library-item-icon", it.type));
+    const label = document.createElement("span");
+    label.className = "library-item-label";
+    label.textContent = it.name || it.action;
+    el.append(label);
+    el.title = it.macro ? `${it.name} · ${it.macro}` : it.name;
+    el.onclick = async () => {
+      if (await postApi("/api/set_tile", {pageId:appState.selectedPageId, slotIndex:selectedSlotIndex, tileType, customLabel:it.macro ? it.name : null})) {
+        showToast(`${it.name} assigned to slot ${selectedSlotIndex + 1}`);
       }
-    });
-
-    drawerContent.appendChild(el);
+    };
+    drawerContent.append(el);
   });
+  if (!filtered.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-library";
+    empty.textContent = q ? "No matching items. Try a different search." : "No items available yet.";
+    drawerContent.append(empty);
+  }
+  if (activeTab === "controls" && !appState.keyboardBacklight?.supported) {
+    const notice = document.createElement("p");
+    notice.className = "library-notice";
+    notice.textContent = appState.keyboardBacklight?.message || "Checking keyboard-light support…";
+    drawerContent.append(notice);
+  }
+}
+
+function tileLabel(tile) {
+  return tile.customLabel || appState.controlsLibrary?.find(it => it.action === tile.tileType?.action)?.name || tile.tileType?.name || tile.tileType?.action || "Action";
+}
+
+function artwork(data, className, type) {
+  const fallback = () => {
+    const span = document.createElement("span");
+    span.className = className;
+    span.innerHTML = uiIcon(type === "website" ? "globe" : type === "shortcut" ? "bolt" : "apps");
+    return span;
+  };
+  if (!data) return fallback();
+  const img = document.createElement("img");
+  img.className = className;
+  img.src = `data:image/png;base64,${data}`;
+  img.alt = "";
+  img.onerror = () => img.replaceWith(fallback());
+  return img;
+}
+
+let toastTimer;
+function showToast(message) {
+  const toast = document.getElementById("toast");
+  toast.textContent = message;
+  toast.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toast.hidden = true; }, 3000);
 }
 
 // -----------------------------------------------------------------------------
@@ -369,12 +381,53 @@ function setupEventListeners() {
     const apps = prompt("Switch to this page when an app comes to the foreground. Enter executable names separated by commas.", page.triggerApps.join(", "));
     if (apps !== null) postApi("/api/page_triggers", {pageId: page.id, apps});
   };
-  document.getElementById("addCustomTile").onclick = () => {
-    const website = activeTab === "websites";
-    const value = prompt(website ? "Website URL" : "Keyboard shortcut (e.g. CTRL+SHIFT+S)")?.trim();
-    if (!value) return;
-    const tileType = website ? {type: "website", url: value, name: value} : {type: "shortcut", name: value};
-    postApi("/api/set_tile", {pageId: appState.selectedPageId, slotIndex: selectedSlotIndex, tileType});
+  document.getElementById("btnSync").onclick = async () => {
+    if (await postApi("/api/sync")) showToast("Deck sent to phone");
+  };
+  const websiteDialog = document.getElementById("websiteDialog");
+  document.getElementById("addCustomTile").onclick = () => websiteDialog.showModal();
+  document.getElementById("cancelWebsite").onclick = () => websiteDialog.close();
+  document.getElementById("websiteForm").onsubmit = async event => {
+    event.preventDefault();
+    const name = document.getElementById("websiteName").value.trim();
+    const url = document.getElementById("websiteUrl").value.trim();
+    if (await postApi("/api/set_tile", {pageId:appState.selectedPageId, slotIndex:selectedSlotIndex, tileType:{type:"website", name, url}})) {
+      websiteDialog.close();
+      showToast(`${name} assigned to slot ${selectedSlotIndex + 1}`);
+    }
+  };
+  const shortcutInput = document.getElementById("shortcutInput");
+  const assign = document.getElementById("assignShortcut");
+  const modifiers = document.querySelectorAll("[data-modifier]");
+  const updateShortcut = () => { assign.disabled = !shortcutInput.value.trim(); };
+  modifiers.forEach(button => { button.onclick = () => {
+    button.setAttribute("aria-pressed", button.getAttribute("aria-pressed") !== "true");
+    const keys = Array.from(modifiers).filter(b => b.getAttribute("aria-pressed") === "true").map(b => b.dataset.modifier);
+    const key = shortcutInput.value.split("+").filter(part => !["WIN","ALT","CTRL","SHIFT"].includes(part)).pop();
+    shortcutInput.value = [...keys, ...(key ? [key] : [])].join("+");
+    updateShortcut();
+  }; });
+  shortcutInput.onkeydown = event => {
+    if (event.key === "Tab") return;
+    if (["Backspace", "Delete"].includes(event.key) && !event.ctrlKey && !event.altKey) {
+      shortcutInput.value = ""; modifiers.forEach(b => b.setAttribute("aria-pressed", "false")); updateShortcut(); event.preventDefault(); return;
+    }
+    if (["Control", "Shift", "Alt", "Meta"].includes(event.key)) return;
+    event.preventDefault();
+    const keys = [];
+    for (const [pressed, name] of [[event.metaKey,"WIN"],[event.altKey,"ALT"],[event.ctrlKey,"CTRL"],[event.shiftKey,"SHIFT"]]) {
+      if (pressed || document.querySelector(`[data-modifier="${name}"]`).getAttribute("aria-pressed") === "true") keys.push(name);
+    }
+    const key = ({" ":"SPACE", Escape:"ESC", ArrowLeft:"LEFT", ArrowRight:"RIGHT", ArrowUp:"UP", ArrowDown:"DOWN"})[event.key] || event.key.toUpperCase();
+    shortcutInput.value = [...keys, key].join("+");
+    modifiers.forEach(button => button.setAttribute("aria-pressed", keys.includes(button.dataset.modifier)));
+    updateShortcut();
+  };
+  shortcutInput.oninput = updateShortcut;
+  document.getElementById("shortcutForm").onsubmit = async event => {
+    event.preventDefault();
+    const name = shortcutInput.value.trim();
+    if (name && await postApi("/api/set_tile", {pageId:appState.selectedPageId, slotIndex:selectedSlotIndex, tileType:{type:"shortcut", name}})) showToast(`${name} assigned to slot ${selectedSlotIndex + 1}`);
   };
   document.getElementById("checkUpdates").onclick = () => postApi("/api/check_updates", {});
   document.getElementById("supportMacDeck").onclick = () => postApi("/api/support", {});
@@ -427,9 +480,6 @@ function setupEventListeners() {
     libraryDrawer.style.display = libraryDrawer.style.display === "none" ? "flex" : "none";
   });
 
-  btnCloseLibrary.addEventListener("click", () => {
-    libraryDrawer.style.display = "none";
-  });
 
   chkRunningApps.addEventListener("change", (e) => {
     postApi("/api/set_toggles", { showRunningApps: e.target.checked });
@@ -453,13 +503,21 @@ function setupEventListeners() {
 
   tabButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
-      tabButtons.forEach((b) => b.classList.remove("active"));
+      tabButtons.forEach((b) => { b.classList.remove("active"); b.setAttribute("aria-selected", "false"); });
       btn.classList.add("active");
+      btn.setAttribute("aria-selected", "true");
       activeTab = btn.dataset.tab;
       renderLibrary();
     });
   });
 
+  tabButtons.forEach((button, index) => button.addEventListener("keydown", event => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const target = event.key === "Home" ? 0 : event.key === "End" ? tabButtons.length - 1 :
+      (index + (event.key === "ArrowRight" ? 1 : -1) + tabButtons.length) % tabButtons.length;
+    tabButtons[target].focus(); tabButtons[target].click();
+  }));
   librarySearch.addEventListener("input", (e) => {
     libraryFilter = e.target.value;
     renderLibrary();
@@ -502,3 +560,24 @@ function escapeHtml(str) {
 }
 
 document.addEventListener("DOMContentLoaded", init);
+
+function uiIcon(name) {
+  const paths = {
+    grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+    apps:'<rect x="3" y="4" width="15" height="13" rx="2"/><path d="M7 17v3h14V8h-3"/>',
+    phone:'<rect x="6" y="2" width="12" height="20" rx="3"/><path d="M10 5h4M11 19h2"/>',
+    sync:'<path d="M20 8a8 8 0 0 0-14-3L3 8m0-5v5h5m-4 8a8 8 0 0 0 14 3l3-3m0 5v-5h-5"/>',
+    globe:'<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18M5 7h14M5 17h14"/>',
+    controls:'<path d="m5 15 7-7 7 7"/>',
+    bolt:'<path d="m13 2-9 12h7l-1 8 10-13h-8z"/>',
+    edit:'<path d="m15 4 5 5M4 15 16 3a2 2 0 0 1 3 0l2 2a2 2 0 0 1 0 3L9 20l-6 1z"/>',
+    power:'<path d="M12 2v10M6 5a9 9 0 1 0 12 0"/>',
+    record:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/>',
+    chat:'<path d="M4 3h11a2 2 0 0 1 2 2v9H8l-5 4V5a2 2 0 0 1 1-2Z"/><path d="M17 7h3a2 2 0 0 1 2 2v12l-5-4h-6v-3"/>',
+    settings:'<path d="m9 3 1-2h4l1 2 3 2 3 1v4l-2 2v3l1 3-3 3-3-1h-3l-2 2H5l-1-3-2-3-2-1v-4l2-2V6l3-3 3 1z" transform="translate(2 2) scale(.82)"/><circle cx="12" cy="12" r="3"/>',
+    heart:'<path d="M20 5a5 5 0 0 0-8 1 5 5 0 0 0-8-1c-5 5 3 12 8 16 5-4 13-11 8-16Z"/>',
+    keyboard:'<rect x="2" y="7" width="20" height="13" rx="2"/><path d="M5 11h1m3 0h1m3 0h1m3 0h1M5 15h1m3 0h1m3 0h1m3 0h1M8 18h8M12 1v3M5 2l2 3m12-3-2 3"/>',
+    broadcast:'<circle cx="12" cy="10" r="2" fill="currentColor"/><path d="M12 12v10M7 5a7 7 0 0 0 0 10m10-10a7 7 0 0 1 0 10M4 2a11 11 0 0 0 0 16M20 2a11 11 0 0 1 0 16"/>'
+  };
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.grid}</svg>`;
+}

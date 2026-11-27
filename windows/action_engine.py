@@ -11,6 +11,8 @@ import logging
 import subprocess
 import webbrowser
 from typing import Optional, List, Dict, Tuple
+from app_icons import get_app_icon
+from keyboard_backlight import KeyboardBacklight
 try:
     from .models import TileType, SystemControlAction, BrowserControlAction
 except ImportError:
@@ -83,6 +85,7 @@ class ActionEngine:
 
     def __init__(self):
         self.is_keep_awake_active: bool = False
+        self.keyboard_backlight = KeyboardBacklight()
 
     # -------------------------------------------------------------------------
     # Low-level Keystroke Injection (Win32 keybd_event)
@@ -139,6 +142,8 @@ class ActionEngine:
                 logger.warning(f"Unknown or unhandled tile type: {kind}")
         except Exception as e:
             logger.error(f"Error executing action {tile_type}: {e}", exc_info=True)
+            if kind == "systemControl" and (tile_type.action or "").startswith("kbBrightness"):
+                raise
 
     # -------------------------------------------------------------------------
     # System Controls
@@ -161,6 +166,10 @@ class ActionEngine:
             self.adjust_brightness(step=10)
         elif action == SystemControlAction.brightnessDown:
             self.adjust_brightness(step=-10)
+        elif action == SystemControlAction.kbBrightnessUp:
+            self.keyboard_backlight.adjust(0.1)
+        elif action == SystemControlAction.kbBrightnessDown:
+            self.keyboard_backlight.adjust(-0.1)
         elif action == SystemControlAction.sleepMac:
             self.sleep_pc()
         elif action == SystemControlAction.keepAwake:
@@ -316,6 +325,10 @@ class ActionEngine:
                 regular_key = VK_SPACE
             elif k == "ESC":
                 regular_key = VK_ESCAPE
+            elif k in ("LEFT", "RIGHT", "UP", "DOWN", "DELETE", "BACKSPACE", "HOME", "END", "PAGEUP", "PAGEDOWN"):
+                regular_key = {"LEFT":VK_LEFT, "RIGHT":VK_RIGHT, "UP":VK_UP, "DOWN":VK_DOWN,
+                               "DELETE":0x2E, "BACKSPACE":VK_BACK, "HOME":0x24, "END":0x23,
+                               "PAGEUP":0x21, "PAGEDOWN":0x22}[k]
 
         if regular_key:
             self.tap_combo(modifiers, regular_key)
@@ -349,7 +362,16 @@ class ActionEngine:
                     title = buffer.value.strip()
                     # Filter out tiny or background tool windows
                     if title and title not in ["Program Manager", "Settings"]:
-                        results.append({"name": title, "bundleIdentifier": str(hwnd)})
+                        icon = None
+                        try:
+                            import psutil
+                            import win32process
+                            pid = win32process.GetWindowThreadProcessId(hwnd)[1]
+                            icon = get_app_icon(psutil.Process(pid).exe(), title)
+                        except (OSError, psutil.Error):
+                            pass
+                        results.append({"name": title, "bundleIdentifier": str(hwnd),
+                                        "iconData": icon or get_app_icon("", title)})
             return True
 
         WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_ssize_t)

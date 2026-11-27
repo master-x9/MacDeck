@@ -1,5 +1,7 @@
 # Publishing in-app updates
 
+For Windows beta releases, pass a prerelease version such as `1.2.3-beta.1` to `windows.ps1` or the **Build Windows Beta** workflow. Publish the resulting Windows assets under a dedicated GitHub tag (for example `windows-1.2.3-beta.1`) with **Set as a pre-release** enabled. Keep the stable Mac/Android release and feeds unchanged. Include `releases.win.json`, the full `.nupkg`, and `WinDeck-Setup.exe`; beta installations opt into prereleases based on their installed version.
+
 Install the first updater-enabled build manually on each device. Keep each platform's version independent. Increase the Mac build number and marketing version, the Windows semantic version, or the Android versionCode and versionName when that platform changes.
 
 1. On macOS, run `release/setup-sparkle.sh` once before building in Xcode. Build and sign MacDeck, including its embedded Sparkle framework. Use the MacDeck update-signing identity in the release machine's login Keychain. The public key is in Info.plist. Preserve the private key for future updates.

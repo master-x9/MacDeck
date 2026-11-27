@@ -53,7 +53,7 @@ COUNT = re.compile(r"\b([0-9]+\+?)\s+(?:unread\s+)?(?:mentions?|messages?|notifi
 
 def tile(page_id, slot, kind, action, label, name=None):
     return DeckTile(slotIndex=slot, tileType=TileType(type=kind, action=action, name=name),
-                    customLabel=label, iconData=get_icon(kind),
+                    customLabel=label, iconData=get_icon(action or kind),
                     id=str(uuid.uuid5(uuid.UUID(page_id), str(slot))).upper())
 
 

@@ -142,7 +142,8 @@ class TestWinDeck(unittest.TestCase):
             with open(os.path.join(directory, "pages.json"), "w") as file:
                 json.dump([page.to_dict()], file)
             store = PageStore(storage_dir=directory)
-            self.assertEqual(store.pages[0].tiles[:4], [None] * 4)
+            self.assertEqual([store.pages[0].tiles[i] for i in (0, 1, 3)], [None] * 3)
+            self.assertEqual(store.pages[0].tiles[2].tileType.action, "kbBrightnessUp")
             self.assertEqual(store.pages[0].tiles[4].tileType.action, "volumeUp")
             self.assertNotIn(LOCKED_PAGE_ID, [p.id for p in store.all_pages])
 

@@ -126,6 +126,8 @@ Discord's tray-only mode, UI language and which controls are visible all affect 
 
 ## Desktop updates
 
+**Windows Beta:** [Download WinDeck 1.2.3-beta.1](https://github.com/master-x9/MacDeck/releases/download/windows-1.2.3-beta.1/WinDeck-Setup.exe) or read the [beta release notes](https://github.com/master-x9/MacDeck/releases/tag/windows-1.2.3-beta.1). This preview brings the Mac-style editor, real app icons, website favicons, and keyboard lighting on supported Windows Dynamic Lighting devices. It uses the same saved decks as the regular build; back up `%APPDATA%/WinDeck` before trying it. Beta builds can receive prerelease updates; regular builds continue to exclude prereleases. The installer is unsigned, so browser/Windows download warnings may still appear.
+
 MacDeck and WinDeck 1.2.0 and later self-update. A newer release surfaces in-app with version and notes; accept to download and relaunch. Mac users can also use *MacDeck → Check for Updates…*. Mac builds are EdDSA-signed via Sparkle against the public key in `Info.plist`; WinDeck uses Velopack against the latest GitHub release. Checksums are published for both.
 
 Maintainers: see [`release/README.md`](release/README.md).

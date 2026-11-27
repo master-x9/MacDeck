@@ -15,6 +15,8 @@ def monitor_updates(stop: threading.Event, requested: threading.Event, host):
         try:
             manager = velopack.UpdateManager(velopack.GithubSource(REPOSITORY))
             host.app_version = manager.get_current_version()
+            if "-" in host.app_version:
+                manager = velopack.UpdateManager(velopack.GithubSource(REPOSITORY, prerelease=True))
             update = manager.check_for_updates()
             if update and not stop.is_set():
                 release = update.TargetFullRelease

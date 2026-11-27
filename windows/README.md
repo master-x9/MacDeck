@@ -23,3 +23,10 @@ Open the live OBS page to start or stop recording and streaming, switch scenes, 
 ## Build from source on Windows
 
 With Python 3.11 or later installed, double-click **run.bat** to install the dependencies and run the desktop host. **build_exe.bat** builds a standalone executable with PyInstaller. Select a single file or a folder bundle when prompted. Run the tests with `python -m unittest discover -s tests` after installing requirements.txt.
+# Windows Beta
+
+The Windows beta follows the MacDeck editor: Controls, Apps, Shortcuts, Websites, and Setup. Custom key combinations live in Setup; Browser Control remains an optional live page in the sidebar. Installed apps use Windows Shell artwork, and website tiles fetch favicons in the background. Existing saved decks refresh their icons on startup.
+
+Keyboard brightness appears only for available keyboard devices exposed by Windows Dynamic Lighting. Other keyboards show an unsupported/unavailable message; a laptop having an Fn backlight key does not mean it exposes a software-control API. The brightness controls use white backlighting. Manufacturer-specific lighting remains in the manufacturer's app.
+
+The installer is currently unsigned. Edge or Windows may show an unverified or uncommon-download warning; the UI update cannot remove it. Download only from the official GitHub release or macdeck.fun. Authenticode signing and reputation are separate release work; see [Microsoft's SmartScreen guidance](https://learn.microsoft.com/windows/apps/package-and-deploy/smartscreen-reputation).
