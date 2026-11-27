@@ -22,6 +22,10 @@ The Android companion also pairs with the Windows host. The desktop hosts includ
 
 Install the Android app and the host for your computer, then follow [Pair your phone and try a tile](#pair-your-phone-and-try-a-tile). You can also find all downloads on the [GitHub release page](https://github.com/master-x9/MacDeck/releases/latest).
 
+## Desktop updates
+
+Install MacDeck or WinDeck 1.2.0 once to enable in-app updates. When a newer release becomes available, the desktop app shows its version and release notes. Accept to download the package and restart. On Mac, you can also choose **MacDeck → Check for Updates…**. Maintainers can follow the [update release instructions](release/README.md) to publish the packages and feeds for the next version.
+
 ## What can go on a deck?
 
 | On your phone | On your computer |

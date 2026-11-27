@@ -4,7 +4,7 @@ WinDeck pairs with the MacDeck Android app over Wi-Fi. The desktop editor has a 
 
 ## Run and pair
 
-1. Extract the entire portable Windows x64 ZIP and open **WinDeck.exe**. Keep the app and runtime folders beside the executable. The desktop window uses Edge WebView2. If it is unavailable, WinDeck opens the dashboard in the default browser.
+1. Run **WinDeck-Setup.exe** once. If you used the old portable ZIP, quit that copy before starting the installed app. WinDeck checks for updates on launch and every four hours. Choose **Yes** in the version-and-release-notes prompt to download, install and restart. The desktop window uses Edge WebView2. If it is unavailable, WinDeck opens the dashboard in the default browser.
 2. Connect the phone and PC to the same local network. If Windows Firewall asks, allow WinDeck on the private network.
 3. Open MacDeck on Android, choose the PC in the discovery list, and click **Approve** on the desktop. WinDeck remembers the phone. Click **Disconnect** on its connection card to end the session. Approve the next connection when you want to resume. **Host settings → Trusted phones** lets you forget it.
 
