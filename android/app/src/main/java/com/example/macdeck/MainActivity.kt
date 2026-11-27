@@ -45,13 +45,20 @@ import kotlinx.coroutines.launch
 import kotlin.math.absoluteValue
 
 class MainActivity : FragmentActivity() {
-    private val installPermission: androidx.activity.result.ActivityResultLauncher<android.content.Intent> = registerForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
-    ) {
-        if (Build.VERSION.SDK_INT >= 26 && packageManager.canRequestPackageInstalls()) checkForAppUpdate()
+    private var waitingForInstallPermission = false
+
+    internal fun requestUpdatePermission(intent: android.content.Intent) {
+        waitingForInstallPermission = true
+        startActivity(intent)
     }
 
-    internal fun requestUpdatePermission(intent: android.content.Intent): Unit = installPermission.launch(intent)
+    override fun onResume() {
+        super.onResume()
+        if (waitingForInstallPermission) {
+            waitingForInstallPermission = false
+            if (Build.VERSION.SDK_INT >= 26 && packageManager.canRequestPackageInstalls()) checkForAppUpdate()
+        }
+    }
 
     private val viewModel: AppViewModel by viewModels()
 
