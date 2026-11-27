@@ -61,7 +61,7 @@ struct MacDeckApp: App {
             // Include standard sidebar commands
             SidebarCommands()
             CommandGroup(after: .appInfo) {
-                Button("Check for Updates…") { AppUpdates.shared.updater.checkForUpdates() }
+                Button("Check for Updates…") { AppUpdates.shared.checkNow() }
             }
         }
     }

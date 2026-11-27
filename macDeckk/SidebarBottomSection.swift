@@ -223,7 +223,7 @@ struct SidebarBottomSection: View {
 
                 Spacer()
 
-                Text("v1.0")
+                Text("v\(AppUpdates.version)")
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .foregroundStyle(.secondary.opacity(0.6))
             }

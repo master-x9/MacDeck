@@ -65,6 +65,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let openItem = NSMenuItem(title: "Open MacDeck", action: #selector(openMacDeck), keyEquivalent: "")
         openItem.target = self
         menu.addItem(openItem)
+        let updates = NSMenuItem(title: "Check for Updates…", action: #selector(checkUpdates), keyEquivalent: "")
+        updates.target = self
+        menu.addItem(updates)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -125,6 +128,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         LaunchAtLoginManager.shared.toggle()
         menu.update()
     }
+
+    @objc private func checkUpdates() { AppUpdates.shared.checkNow() }
 
     @objc private func openMacDeck() {
         NSApp.activate(ignoringOtherApps: true)

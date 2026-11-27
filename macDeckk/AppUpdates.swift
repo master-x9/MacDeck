@@ -14,6 +14,10 @@ final class UpdatePrompt: SPUStandardUserDriver {
         alert.informativeText = (appcastItem.itemDescription ?? "") + "\n\nMacDeck will download the update and restart."
         alert.addButton(withTitle: "Update & Restart")
         alert.addButton(withTitle: "Later")
+        NSApp.activate(ignoringOtherApps: true)
+        alert.window.level = .floating
+        alert.window.collectionBehavior.insert(.moveToActiveSpace)
+        alert.window.makeKeyAndOrderFront(nil)
         restartApproved = alert.runModal() == .alertFirstButtonReturn
         reply(restartApproved ? .install : .dismiss)
     }
@@ -33,8 +37,25 @@ final class AppUpdates {
     static let shared = AppUpdates()
     let updater = SPUUpdater(hostBundle: .main, applicationBundle: .main,
                              userDriver: UpdatePrompt(hostBundle: .main, delegate: nil), delegate: nil)
+    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"
+    private var startupError: Error?
     func start() {
-        do { try updater.start() }
-        catch { NSLog("Could not start MacDeck updates: %@", error.localizedDescription) }
+        do {
+            try updater.start()
+            startupError = nil
+            if updater.automaticallyChecksForUpdates { updater.checkForUpdatesInBackground() }
+        } catch {
+            startupError = error
+            NSLog("Could not start MacDeck updates: %@", error.localizedDescription)
+        }
+    }
+
+    func checkNow() {
+        NSApp.activate(ignoringOtherApps: true)
+        if let error = startupError {
+            NSAlert(error: error).runModal()
+        } else {
+            updater.checkForUpdates()
+        }
     }
 }

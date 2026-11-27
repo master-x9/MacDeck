@@ -118,6 +118,7 @@ class WinDeckHttpServer(HTTPServer):
         return {
             "pages": [dict(p.to_dict(), readOnly=p.pageNumber <= 0) for p in ctx.page_store.all_pages],
             "gridRows": ctx.page_store.grid_rows,
+            "appVersion": getattr(ctx, "app_version", None),
             "showOBS": ctx.page_store.show_obs,
             "showDiscord": ctx.page_store.show_discord,
             "obsPort": ctx.page_store.obs_port,
@@ -140,6 +141,11 @@ class WinDeckHttpServer(HTTPServer):
         ctx = self.ctx
         ps = ctx.page_store
 
+        if path == "/api/check_updates":
+            if sys.platform != "win32" or not getattr(sys, "frozen", False):
+                return {"success": False, "error": "Install WinDeck with WinDeck-Setup.exe to use in-app updates."}
+            ctx.update_requested.set()
+            return {"success": True}
         if path == "/api/support":
             return {"success": webbrowser.open("https://macdeck.fun/?support=1")}
 
@@ -332,6 +338,8 @@ class WinDeckApp:
         self.network.obs = self.obs
         self.loop = asyncio.new_event_loop()
         self.quit = threading.Event()
+        self.update_requested = threading.Event()
+        self.app_version = None
         self.window = None
         self.http_server = None
         self.tray_icon = None
@@ -371,6 +379,7 @@ class WinDeckApp:
 
             menu = pystray.Menu(
                 pystray.MenuItem("Open WinDeck", open_ui, default=True),
+                pystray.MenuItem("Check for Updates…", lambda: self.update_requested.set(), enabled=bool(getattr(sys, "frozen", False))),
                 pystray.MenuItem(f"PC: {self.network.computer_name}", None, enabled=False),
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("Exit", on_exit)
@@ -433,7 +442,7 @@ class WinDeckApp:
         self.start_system_tray()
         if sys.platform == "win32" and getattr(sys, "frozen", False):
             from app_updates import monitor_updates
-            threading.Thread(target=monitor_updates, args=(self.quit,), daemon=True).start()
+            threading.Thread(target=monitor_updates, args=(self.quit, self.update_requested, self), daemon=True).start()
         try:
             if not headless:
                 url = f"http://localhost:{HTTP_PORT}"

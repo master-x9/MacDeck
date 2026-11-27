@@ -110,7 +110,7 @@ function render() {
 }
 
 function renderConnection() {
-  hostInfo.textContent = `Host: ${appState.computerName || "WinDeck PC"}`;
+  hostInfo.textContent = `Host: ${appState.computerName || "WinDeck PC"}${appState.appVersion ? " · v" + appState.appVersion : ""}`;
 
   document.getElementById("disconnectDevice").style.display = appState.status === "connected" ? "" : "none";
   if (appState.status === "connected") {
@@ -376,6 +376,7 @@ function setupEventListeners() {
     const tileType = website ? {type: "website", url: value, name: value} : {type: "shortcut", name: value};
     postApi("/api/set_tile", {pageId: appState.selectedPageId, slotIndex: selectedSlotIndex, tileType});
   };
+  document.getElementById("checkUpdates").onclick = () => postApi("/api/check_updates", {});
   document.getElementById("supportMacDeck").onclick = () => postApi("/api/support", {});
   const settings = document.getElementById("integrationSettings");
   const port = document.getElementById("obsPort");

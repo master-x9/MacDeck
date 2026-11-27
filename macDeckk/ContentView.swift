@@ -88,6 +88,18 @@ struct ContentView: View {
                 .padding(.top, 12)
                 .padding(.bottom, 6)
 
+            Button(action: AppUpdates.shared.checkNow) {
+                HStack {
+                    Label("Check for Updates…", systemImage: "arrow.triangle.2.circlepath")
+                    Spacer()
+                    Text("v\(AppUpdates.version)").foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
+            }
+            .buttonStyle(.plain)
+            .font(.caption)
+            .padding(.horizontal, 16)
+
             // Pairing Approval Banner
             if case .awaitingApproval(let clientID, let deviceName) = network.status {
                 pairingApprovalBanner(clientID: clientID, deviceName: deviceName)

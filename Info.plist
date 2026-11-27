@@ -6,6 +6,8 @@
     <string>https://github.com/master-x9/MacDeck/releases/latest/download/appcast.xml</string>
     <key>SUPublicEDKey</key>
     <string>nuBQh0s3imCd8yvxHd+gOzrqV4mUOIZ3GDxRDXnHhyA=</string>
+    <key>SUScheduledCheckInterval</key>
+    <integer>3600</integer>
     <key>SUEnableAutomaticChecks</key>
     <true/>
     <key>SUAutomaticallyUpdate</key>
