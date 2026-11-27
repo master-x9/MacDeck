@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+        ABC100000000000000000001 = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = Vendor/Sparkle/Sparkle.framework; sourceTree = SOURCE_ROOT; };
+        ABC100000000000000000003 = {isa = PBXBuildFile; fileRef = ABC100000000000000000001; };
+        ABC100000000000000000004 = {isa = PBXBuildFile; fileRef = ABC100000000000000000001; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeaders,); }; };
+        ABC100000000000000000005 = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147483647; dstPath = ""; dstSubfolderSpec = 10; files = (ABC100000000000000000004,); name = "Embed Frameworks"; runOnlyForDeploymentPostprocessing = 0; };
 /* Begin PBXFileReference section */
 		916CA2A6302A334100BE43E8 /* MacDeck.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MacDeck.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -23,6 +27,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+                ABC100000000000000000003,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -55,6 +60,7 @@
 				916CA2A2302A334100BE43E8 /* Sources */,
 				916CA2A3302A334100BE43E8 /* Frameworks */,
 				916CA2A4302A334100BE43E8 /* Resources */,
+                ABC100000000000000000005,
 			);
 			buildRules = (
 			);
@@ -65,6 +71,7 @@
 			);
 			name = MacDeck;
 			packageProductDependencies = (
+
 			);
 			productName = MacDeck;
 			productReference = 916CA2A6302A334100BE43E8 /* MacDeck.app */;
@@ -92,7 +99,8 @@
 				en,
 				Base,
 			);
-			mainGroup = 916CA29D302A334100BE43E8;
+
+            mainGroup = 916CA29D302A334100BE43E8;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 916CA2A7302A334100BE43E8 /* Products */;
@@ -251,7 +259,7 @@
 				CODE_SIGN_ENTITLEMENTS = MacDeck.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -260,11 +268,12 @@
 				INFOPLIST_KEY_CFBundleName = MacDeck;
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "MacDeck requires permission to control System Events in order to simulate global keyboard shortcuts.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				LD_RUNPATH_SEARCH_PATHS = (
+				FRAMEWORK_SEARCH_PATHS = ("$(inherited)", "$(PROJECT_DIR)/Vendor/Sparkle",);
+                LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.1.1;
+				MARKETING_VERSION = 1.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jk.MacDeck;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -285,7 +294,7 @@
 				CODE_SIGN_ENTITLEMENTS = MacDeck.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -294,11 +303,12 @@
 				INFOPLIST_KEY_CFBundleName = MacDeck;
 				INFOPLIST_KEY_NSAppleEventsUsageDescription = "MacDeck requires permission to control System Events in order to simulate global keyboard shortcuts.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				LD_RUNPATH_SEARCH_PATHS = (
+				FRAMEWORK_SEARCH_PATHS = ("$(inherited)", "$(PROJECT_DIR)/Vendor/Sparkle",);
+                LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.1.1;
+				MARKETING_VERSION = 1.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jk.MacDeck;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;

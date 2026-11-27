@@ -14,3 +14,6 @@ temp_prompt.html
 scratch_generate_base64.swift
 main
 test_*.swift
+
+/Vendor/Sparkle/
+/release/out/

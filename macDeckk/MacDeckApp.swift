@@ -9,6 +9,7 @@
 
 import SwiftUI
 import AppKit
+import Sparkle
 
 @main
 struct MacDeckApp: App {
@@ -50,6 +51,7 @@ struct MacDeckApp: App {
                     }
                     network.observeIntegrations(in: store)
                     network.start()
+                    AppUpdates.shared.start()
                     self.menuBarController = MenuBarController(pageStore: store, deckNetworkManager: network)
                 }
         }
@@ -58,6 +60,9 @@ struct MacDeckApp: App {
         .commands {
             // Include standard sidebar commands
             SidebarCommands()
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") { AppUpdates.shared.updater.checkForUpdates() }
+            }
         }
     }
 }

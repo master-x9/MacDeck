@@ -1,0 +1,10 @@
+# Publishing in-app updates
+
+Install the first updater-enabled build manually on each device. Keep each platform's version independent. Increase the Mac build number and marketing version, the Windows semantic version, or the Android versionCode and versionName when that platform changes.
+
+1. On macOS, run `release/setup-sparkle.sh` once before building in Xcode. Build and sign MacDeck, including its embedded Sparkle framework. Use the MacDeck update-signing identity in the release machine's login Keychain. The public key is in Info.plist. Preserve the private key for future updates.
+2. Put the release notes in a plain text file. Run `python3 release/prepare-updates.py TAG NOTES.txt --app /path/to/MacDeck.app --out release/out`. This verifies the app, signs the ZIP, verifies its signature, and writes appcast.xml.
+3. On Windows, install the .NET SDK and the matching CLI with `dotnet tool install --global vpk --version 1.2.161`. Run `release/windows.ps1 -Version 1.2.0 -Notes NOTES.txt`. Distribute the generated Setup.exe to first-time users and upload the generated Windows release index and packages alongside it. Existing portable ZIP users migrate by installing Setup.exe once.
+4. For Android, sign the APK with the same key as the installed release. With Android SDK build-tools on PATH run `python3 release/prepare-updates.py TAG NOTES.txt --apk /path/to/signed.apk --out release/out`. The Android installer asks for installation approval and offers Open after updating.
+5. Upload packages and feeds to a draft GitHub release, then publish it as latest after verifying all files. Carry forward current feeds and assets for platforms you did not rebuild. Mac and Android feeds link to immutable tagged download URLs. WinDeck reads the latest release through Velopack's GitHub source.
+6. Test on a previous updater-enabled installation with a saved deck and paired phone. Confirm the version and notes, accept the update, and verify the restarted host retains its settings. Test Later and an interrupted download before promoting a release.

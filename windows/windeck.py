@@ -16,6 +16,10 @@ import webbrowser
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
 
+if __name__ == "__main__" and sys.platform == "win32" and getattr(sys, "frozen", False):
+    import velopack
+    velopack.App().run()
+
 # Support PyInstaller standalone bundle path
 if getattr(sys, "frozen", False):
     current_dir = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
@@ -424,6 +428,9 @@ class WinDeckApp:
         thread = threading.Thread(target=self.loop.run_until_complete, args=(self.serve(),))
         thread.start()
         self.start_system_tray()
+        if sys.platform == "win32" and getattr(sys, "frozen", False):
+            from app_updates import monitor_updates
+            threading.Thread(target=monitor_updates, args=(self.quit,), daemon=True).start()
         try:
             if not headless:
                 url = f"http://localhost:{HTTP_PORT}"

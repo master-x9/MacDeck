@@ -2,6 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>SUFeedURL</key>
+    <string>https://github.com/master-x9/MacDeck/releases/latest/download/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>nuBQh0s3imCd8yvxHd+gOzrqV4mUOIZ3GDxRDXnHhyA=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>SUAutomaticallyUpdate</key>
+    <false/>
     <key>CFBundleDisplayName</key>
     <string>MacDeck</string>
     <key>CFBundleName</key>

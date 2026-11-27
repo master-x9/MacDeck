@@ -45,6 +45,14 @@ import kotlinx.coroutines.launch
 import kotlin.math.absoluteValue
 
 class MainActivity : FragmentActivity() {
+    private val installPermission = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) {
+        if (Build.VERSION.SDK_INT >= 26 && packageManager.canRequestPackageInstalls()) checkForAppUpdate()
+    }
+
+    internal fun requestUpdatePermission(intent: android.content.Intent) = installPermission.launch(intent)
+
     private val viewModel: AppViewModel by viewModels()
 
     /// Prompts for fingerprint/face (falling back to device PIN/pattern) before
@@ -91,6 +99,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) checkForAppUpdate()
 
         enableEdgeToEdge()
 

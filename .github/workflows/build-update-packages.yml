@@ -1,0 +1,53 @@
+name: Build update packages
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: WinDeck semantic version
+        required: true
+      notes:
+        description: Release notes shown in WinDeck
+        required: true
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Package WinDeck
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_NOTES: ${{ inputs.notes }}
+        run: |
+          dotnet tool install --global vpk --version 1.2.161
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Set-Content -Path notes.md -Value $env:RELEASE_NOTES
+          ./release/windows.ps1 -Version $env:RELEASE_VERSION -Notes notes.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WinDeck-update-packages
+          path: release/out/windows/
+          if-no-files-found: error
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - run: bash gradlew :app:assembleRelease
+        working-directory: android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MacDeck-Android-for-signing
+          path: android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error

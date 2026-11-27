@@ -7,3 +7,4 @@ Pillow>=11.2.1
 pywinauto>=0.6.8; sys_platform == "win32"
 psutil>=5.9; sys_platform == "win32"
 pywin32>=306; sys_platform == "win32"
+velopack==1.2.161; sys_platform == "win32"
