@@ -81,6 +81,15 @@ def call_buttons(buttons):
 
 
 def destination(name, identifier, value, in_servers, in_dms=False):
+    from urllib.parse import urlsplit
+    path = urlsplit(value).path if value else ""
+    dm_route = re.fullmatch(r"/channels/@me/[0-9]+/?", path)
+    server_route = re.fullmatch(r"/channels/[0-9]+/?", path)
+    row_id = re.search(r"(?:private-channels-.*___|guildsnav___(?:dm-)?)[0-9]+$", identifier)
+    if path and not (dm_route or server_route):
+        return None
+    if not (dm_route or server_route or row_id) and re.match(r"^\s*(friends|nitro|shop|quests|message requests|family cent(?:er|re)|discover|find or start a conversation|start a conversation|create dm|new message)(?:$|[\s,:!•–-])", name or "", re.I):
+        return None
     direct = (in_dms or "/channels/@me/" in value or "private-channels-" in identifier or identifier.startswith("guildsnav___dm-"))
     if not (direct or in_servers or re.search(r"/channels/[0-9]+/?$", value) or re.fullmatch(r"guildsnav___[0-9]+", identifier)):
         return None
@@ -91,10 +100,10 @@ def destination(name, identifier, value, in_servers, in_dms=False):
     unread = count != "0" if count else direct and "unread" in name.casefold()
     label = re.sub(r"(?:^|,\s*)(?:unread|server|guild)(?:,|$)", "", COUNT.sub("", name), flags=re.I).strip(" ,•:-\n")
     if label:
-        return ("dm:" if direct else "server:") + (identifier or value or label), (label, direct, unread, count)
+        return ("dm:" if direct else "server:") + (path or (identifier if row_id else label.casefold())), (label, direct, unread, count)
 
 
-def discord_page(found, entries, avatar=None):
+def discord_page(found, entries, avatar=None, links=None):
     active = found.keys() & {"disconnect", "cameraOn", "cameraOff", "share", "stopShare"}
     page = DeckPage(id=CALL_ID, name="Incoming Discord Call" if "answer" in found else "Discord Call" if active else "Discord", pageNumber=-4)
     for slot, options in enumerate(SLOTS):
@@ -103,11 +112,21 @@ def discord_page(found, entries, avatar=None):
             t = tile(CALL_ID, slot, "discordControl", key, CALL_LABELS[key][0])
             t.iconData = icon(key, avatar=avatar if key == "answer" else None)
             page.tiles[slot] = t
+    identified = {("dm:" if direct else "server:") + label.casefold() for key, (label, direct, _, _) in entries.items()
+                  if key != ("dm:" if direct else "server:") + label.casefold()}
+    entries = {key: value for key, value in entries.items() if key not in identified}
     unread = [item for item in entries.items() if item[1][2]]
     selected = unread or [item for item in entries.items() if not item[1][1]] or list(entries.items())
     for slot, (key, (label, direct, unread, count)) in enumerate(selected[:5], 5):
         t = tile(CALL_ID, slot, "discordControl", "nav:" + key, label)
-        t.iconData = icon("dm" if direct else "server", (count or "•") if unread else None)
+        art = None
+        if links and key in links:
+            for child in links[key].descendants(control_type="Image"):
+                url = legacy_value(child)
+                if re.fullmatch(r"https://(?:cdn\.discordapp\.com|media\.discordapp\.net)/(?:avatars|embed/avatars|icons|channel-icons)/[\w./-]+(?:\?[^\s]*)?", url):
+                    art = avatar_bytes(url)
+                    break
+        t.iconData = icon("dm" if direct else "server", (count or "•") if unread else None, avatar=art, name=label)
         page.tiles[slot] = t
     return page
 
@@ -258,7 +277,7 @@ def discord_call(press=None):
                 found["toggleMute"] = True
             if not found.keys() & {"deafen", "undeafen"}:
                 found["toggleDeafen"] = True
-        return discord_page(found, entries, caller_avatar(found["answer"], found["decline"]) if "answer" in found else None)
+        return discord_page(found, entries, caller_avatar(found["answer"], found["decline"]) if "answer" in found else None, links=links)
     finally:
         pythoncom.CoUninitialize()
 

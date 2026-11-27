@@ -71,15 +71,23 @@ private nonisolated struct DiscordDestination: Equatable {
     let direct: Bool
     let unread: Bool
     let count: String?
+    var artworkURL: URL?
 
     init?(name label: String, identifier: String, url: URL?, servers: Bool, directMessages: Bool) {
         let id = identifier.lowercased()
         let path = url?.path ?? ""
-        let dm = directMessages || path.hasPrefix("/channels/@me/") || id.contains("private-channels-") || id.hasPrefix("guildsnav___dm-")
-        let server = id.range(of: #"^guildsnav___[0-9]+$"#, options: .regularExpression) != nil ||
-            servers || path.range(of: #"^/channels/[0-9]+/?$"#, options: .regularExpression) != nil
+        let dmID = path.range(of: #"^/channels/@me/[0-9]+/?$"#, options: .regularExpression) != nil
+        let guildID = path.range(of: #"^/channels/[0-9]+/?$"#, options: .regularExpression) != nil
+        let rowID = id.range(of: #"(?:private-channels-.*___|guildsnav___(?:dm-)?)[0-9]+$"#, options: .regularExpression) != nil
+        // The DM landmark also contains links to Friends, the store and promotions.
+        // An explicit link must point at a conversation or guild, regardless of its parent.
+        guard path.isEmpty || dmID || guildID else { return nil }
+        if !dmID && !guildID && !rowID,
+           label.range(of: #"(?i)^\s*(friends|nitro|shop|quests|message requests|family centre|family center|discover|find or start a conversation|start a conversation|create dm|new message)(?:$|[\s,:!•–-])"#, options: .regularExpression) != nil { return nil }
+        let dm = dmID || (!guildID && (directMessages || id.contains("private-channels-") || id.hasPrefix("guildsnav___dm-")))
+        let server = guildID || servers || rowID
         guard dm || server, !label.isEmpty, !id.contains("folder"),
-              label.range(of: #"(?i)\b(folder|direct messages|add a server|discover servers|download apps)\b"#, options: .regularExpression) == nil else { return nil }
+              label.range(of: #"(?i)^(?:folder|direct messages|add a server|discover servers|download apps)(?:$|[, :])"#, options: .regularExpression) == nil else { return nil }
         let pattern = #"(?i)\b([0-9]+\+?)\s+(?:unread\s+)?(?:mentions?|messages?|notifications?)\b"#
         let range = label.range(of: pattern, options: .regularExpression)
         count = range.map { String(label[$0].prefix { $0.isNumber || $0 == "+" }) }
@@ -90,7 +98,7 @@ private nonisolated struct DiscordDestination: Equatable {
         guard !clean.isEmpty else { return nil }
         name = clean
         direct = dm
-        key = (dm ? "dm:" : "server:") + (!identifier.isEmpty ? identifier : !path.isEmpty ? path : clean)
+        key = (dm ? "dm:" : "server:") + (!path.isEmpty ? path : rowID ? identifier : clean.lowercased())
     }
 }
 
@@ -117,6 +125,8 @@ final class DiscordCalls: ObservableObject {
     @Published private(set) var status = Status.checking
     private let logger = Logger(subsystem: "com.jk.MacDeck", category: "DiscordCalls")
     private var previous: DiscordSnapshot?
+    private let sidebarArt = NSCache<NSURL, NSImage>()
+    private var sidebarTask: Task<Void, Never>?
     private var avatarTask: Task<Void, Never>?
     private let queue = DispatchQueue(label: "MacDeck.DiscordCalls")
     private var scanning = false
@@ -175,6 +185,7 @@ final class DiscordCalls: ObservableObject {
         previous = snapshot
         status = message
         avatarTask?.cancel()
+        sidebarTask?.cancel()
         guard message != .disabled else { page = nil; return }
         let found = snapshot.buttons
         let name = found.contains(.answer) ? "Incoming Discord Call" : snapshot.active ? "Discord Call" : "Discord"
@@ -191,11 +202,23 @@ final class DiscordCalls: ObservableObject {
             result.tiles[slot] = DeckTile(slotIndex: slot, tileType: .discordControl(action: .call(button)), customLabel: button.label, iconData: icon)
         }
         for (index, entry) in snapshot.entries.enumerated() {
-            let symbol = entry.direct ? "person.crop.circle.fill" : "number"
-            let icon = Self.badged(.init(systemSymbolName: symbol, accessibilityDescription: nil), badge: entry.unread ? (entry.count ?? "•") : nil)
+            let image = entry.artworkURL.flatMap { sidebarArt.object(forKey: $0 as NSURL) }
+            let icon = Self.sidebarIcon(entry, image: image)
             result.tiles[5 + index] = DeckTile(slotIndex: 5 + index, tileType: .discordControl(action: .sidebar(entry.key)), customLabel: entry.name, iconData: icon)
         }
         page = result
+        sidebarTask = Task {
+            for (index, entry) in snapshot.entries.enumerated() {
+                guard !Task.isCancelled else { return }
+                guard let url = entry.artworkURL, sidebarArt.object(forKey: url as NSURL) == nil,
+                      let (data, response) = try? await URLSession.shared.data(from: url),
+                      (response as? HTTPURLResponse)?.statusCode == 200, data.count <= 1_000_000,
+                      let image = NSImage(data: data), !Task.isCancelled, previous == snapshot else { continue }
+                sidebarArt.countLimit = 32
+                sidebarArt.setObject(image, forKey: url as NSURL)
+                page?.tiles[5 + index]?.iconData = Self.sidebarIcon(entry, image: image)
+            }
+        }
         if let url = snapshot.avatar?.appending(queryItems: [URLQueryItem(name: "size", value: "128")]), found.contains(.answer) {
             avatarTask = Task {
                 guard let (data, response) = try? await URLSession.shared.data(from: url),
@@ -208,20 +231,43 @@ final class DiscordCalls: ObservableObject {
         }
     }
 
-    private static func badged(_ image: NSImage?, badge: String?) -> Data? {
+    private static func sidebarIcon(_ entry: DiscordDestination, image: NSImage?) -> Data? {
+        let artwork = NSImage(size: NSSize(width: 128, height: 128), flipped: false) { rect in
+            let hue = entry.key.utf8.reduce(0) { ($0 * 31 + Int($1)) % 360 }
+            NSColor(calibratedHue: CGFloat(hue) / 360, saturation: 0.65, brightness: 0.52, alpha: 1).setFill()
+            rect.fill()
+            let initials = entry.name.split(whereSeparator: \.isWhitespace).prefix(2).compactMap(\.first)
+            if let image {
+                image.draw(in: NSRect(x: 26, y: 43, width: 76, height: 76))
+            } else {
+                let text = String(initials).uppercased() as NSString
+                let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.boldSystemFont(ofSize: 48), .foregroundColor: NSColor.white]
+                text.draw(at: NSPoint(x: 64 - text.size(withAttributes: attrs).width / 2, y: 49), withAttributes: attrs)
+            }
+            let style = NSMutableParagraphStyle()
+            style.alignment = .center
+            style.lineBreakMode = .byTruncatingTail
+            (entry.name as NSString).draw(in: NSRect(x: 4, y: 8, width: 120, height: 29), withAttributes: [
+                .font: NSFont.boldSystemFont(ofSize: 21), .foregroundColor: NSColor.white, .paragraphStyle: style])
+            return true
+        }
+        return badged(artwork, badge: entry.unread ? entry.count ?? "•" : nil, sidebar: true)
+    }
+
+    private static func badged(_ image: NSImage?, badge: String?, sidebar: Bool = false) -> Data? {
         NSImage(size: NSSize(width: 128, height: 128), flipped: false) { rect in
             NSColor.systemIndigo.setFill()
             NSBezierPath(roundedRect: rect, xRadius: 18, yRadius: 18).fill()
-            let artwork = image?.withSymbolConfiguration(.init(paletteColors: [.white])) ?? image
-            artwork?.draw(in: rect.insetBy(dx: 12, dy: 12))
+            let artwork = sidebar ? image : image?.withSymbolConfiguration(.init(paletteColors: [.white])) ?? image
+            artwork?.draw(in: sidebar ? rect : rect.insetBy(dx: 12, dy: 12))
             if let badge {
                 let title = badge as NSString
                 let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.boldSystemFont(ofSize: 23), .foregroundColor: NSColor.white]
                 let size = title.size(withAttributes: attrs)
-                let box = NSRect(x: 124 - max(36, size.width + 14), y: 5, width: max(36, size.width + 14), height: 35)
+                let box = NSRect(x: 124 - max(36, size.width + 14), y: sidebar ? 87 : 5, width: max(36, size.width + 14), height: 35)
                 (badge == "☎" ? NSColor.systemGreen : .systemRed).setFill()
                 NSBezierPath(roundedRect: box, xRadius: 12, yRadius: 12).fill()
-                if badge != "☎" {
+                if badge != "☎" && !sidebar {
                     let tail = NSBezierPath()
                     tail.move(to: NSPoint(x: box.minX + 8, y: 8))
                     tail.line(to: NSPoint(x: box.minX + 5, y: 0))
@@ -340,8 +386,22 @@ final class DiscordCalls: ObservableObject {
                     let rawURL = attribute(node, kAXURLAttribute)
                     let url = rawURL as? URL ?? (rawURL as? String).flatMap(URL.init(string:))
                     let dmRow = ["AXLink", "AXRow", "AXTreeItem", "AXRadioButton"].contains(role) || groupedItem
-                    if let entry = DiscordDestination(name: title, identifier: id, url: url, servers: inServers,
+                    if var entry = DiscordDestination(name: title, identifier: id, url: url, servers: inServers,
                                                        directMessages: inDMs && dmRow), links[entry.key] == nil {
+                        var pending = Array(children.reversed()), limit = 30
+                        while let child = pending.popLast(), limit > 0 {
+                            limit -= 1
+                            if attribute(child, kAXRoleAttribute) as? String == "AXImage",
+                               let url = attribute(child, kAXURLAttribute) as? URL,
+                               url.scheme == "https", ["cdn.discordapp.com", "media.discordapp.net"].contains(url.host ?? ""),
+                               ["/avatars/", "/embed/avatars/", "/icons/", "/channel-icons/"].contains(where: url.path.hasPrefix),
+                               var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+                                parts.queryItems = [URLQueryItem(name: "size", value: "128")]
+                                entry.artworkURL = parts.url
+                                break
+                            }
+                            pending += (attribute(child, kAXChildrenAttribute) as? [AXUIElement] ?? []).reversed()
+                        }
                         entries.append(entry)
                         links[entry.key] = node
                     }
@@ -382,6 +442,10 @@ final class DiscordCalls: ObservableObject {
             }
         }
         summary = "roots=\(roots.count) nodes=\(seen.count) webAreas=\(webAreas) buttons=\(buttonCount) terms=\(hints.sorted()) actions=\(found.keys.map(\.rawValue).sorted())"
+        // A wrapper with a display name and its nested channel link describe the same tile.
+        let identified = Set(entries.filter { $0.key != ($0.direct ? "dm:" : "server:") + $0.name.lowercased() }
+            .map { ($0.direct ? "dm:" : "server:") + $0.name.lowercased() })
+        entries.removeAll { identified.contains($0.key) }
         let unread = entries.filter(\.unread)
         let servers = entries.filter { !$0.direct }
         snapshot.entries = Array((!unread.isEmpty ? unread : !servers.isEmpty ? servers : entries).prefix(5))

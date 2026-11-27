@@ -59,6 +59,18 @@ class IntegrationTests(unittest.TestCase):
         unread = destination("Casey, 2 unread messages", "", "", False, in_dms=True)
         self.assertEqual(discord_page({}, dict([server, unread])).tiles[5].customLabel, "Casey")
 
+    def test_sidebar_home_links_and_conversation_art(self):
+        for label, path in [("Friends", "/channels/@me"), ("Friends", ""), ("Nitro DISCOUNT", ""),
+                            ("Shop", "/shop"), ("Quests", ""), ("Promotion", "/store")]:
+            self.assertIsNone(destination(label, "", path, False, True))
+        entries = dict([destination("Casey", "", "", False, True),
+                        destination("Casey", "", "/channels/@me/123", False, True),
+                        destination("Shop", "", "/channels/@me/456", False, True)])
+        page = discord_page({}, entries)
+        self.assertEqual([t.customLabel for t in page.tiles[5:7]], ["Casey", "Shop"])
+        self.assertNotEqual(page.tiles[5].iconData, page.tiles[6].iconData)
+        self.assertIsNone(page.tiles[7])
+
     def test_paired_android_controls_obs(self):
         from websockets import serve, connect
 

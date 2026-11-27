@@ -9,13 +9,27 @@ from icons import get_icon
 
 
 @lru_cache(maxsize=128)
-def icon(action, badge=None, avatar=None):
+def icon(action, badge=None, avatar=None, name=None):
     if action == "openDiscord":
         return get_icon("discordControl")
     image = Image.new("RGB", (128, 128), "#5865F2")
     d = ImageDraw.Draw(image)
     white = "white"
-    if action in ("mute", "unmute", "toggleMute"):
+    if name is not None:
+        colors = ("#285d78", "#614580", "#82532f", "#286756", "#774659", "#3f5482")
+        d.rectangle((0, 0, 128, 128), fill=colors[sum(name.encode()) % len(colors)])
+        initials = "".join(word[0] for word in name.split()[:2]).upper()
+        if avatar:
+            with Image.open(BytesIO(avatar)) as source:
+                image.paste(source.convert("RGB").resize((76, 76), Image.Resampling.LANCZOS), (26, 7))
+        else:
+            d.text((64, 48), initials, font=ImageFont.load_default(size=48), anchor="mm", fill=white)
+        font = ImageFont.load_default(size=20)
+        caption = name
+        while caption and d.textlength(caption, font=font) > 119:
+            caption = caption[:-2].rstrip() + "…" if len(caption) > 2 else "…"
+        d.text((64, 100), caption, font=font, anchor="mm", fill=white)
+    elif action in ("mute", "unmute", "toggleMute"):
         d.rounded_rectangle((52, 20, 76, 71), radius=12, fill=white)
         d.arc((38, 35, 90, 87), 0, 180, fill=white, width=7)
         d.line([(64, 86), (64, 102)], fill=white, width=7)
@@ -61,9 +75,10 @@ def icon(action, badge=None, avatar=None):
         font = ImageFont.load_default(size=22)
         width = max(34, int(d.textlength(badge, font=font)) + 14)
         x = 125 - width
-        d.rounded_rectangle((x, 79, 125, 113), radius=10, fill="#bf2637")
-        d.polygon([(x+6, 108), (x+4, 121), (x+19, 108)], fill="#bf2637")
-        d.text((x+width/2, 95), badge, font=font, anchor="mm", fill=white)
+        y = 3 if name else 79
+        d.rounded_rectangle((x, y, 125, y + 34), radius=10, fill="#bf2637")
+        d.polygon([(x+6, y+29), (x+4, y+42), (x+19, y+29)], fill="#bf2637")
+        d.text((x+width/2, y+16), badge, font=font, anchor="mm", fill=white)
     result = BytesIO()
     image.save(result, format="PNG")
     return base64.b64encode(result.getvalue()).decode()
