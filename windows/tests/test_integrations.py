@@ -71,6 +71,26 @@ class IntegrationTests(unittest.TestCase):
         self.assertNotEqual(page.tiles[5].iconData, page.tiles[6].iconData)
         self.assertIsNone(page.tiles[7])
 
+    def test_discord_photo_crop_and_tile(self):
+        from io import BytesIO
+        from unittest.mock import patch
+        from PIL import Image
+        from integrations import crop_avatar
+        frame = Image.new("RGB", (180, 80), "black")
+        frame.paste("red", (8, 8, 40, 40))
+        frame.putpixel((24, 24), (30, 60, 90))
+        art = crop_avatar(frame, (8, 8, 40, 40))
+        self.assertEqual(Image.open(BytesIO(art)).getpixel((16, 16)), (30, 60, 90))
+        self.assertIsNone(crop_avatar(frame, (0, -1, 32, 31)))
+        self.assertIsNone(crop_avatar(frame, (100, 8, 132, 40)))
+        key, entry = destination("Casey (direct message)", "", "/channels/@me/123", False)
+        row = SimpleNamespace(descendants=lambda **_: [])
+        with patch("integrations.visible_dm_avatar", return_value=art):
+            photo_tile = discord_page({}, {key: entry}, links={key: row}).tiles[5]
+        self.assertEqual(photo_tile.customLabel, "Casey")
+        photo = Image.open(BytesIO(base64.b64decode(photo_tile.iconData)))
+        self.assertEqual(photo.getpixel((32, 16)), (255, 0, 0))
+
     def test_paired_android_controls_obs(self):
         from websockets import serve, connect
 

@@ -126,6 +126,14 @@ struct SidebarBottomSection: View {
                         .controlSize(.mini)
                 }
                 if store.showDiscordPage {
+                    if calls.needsPhotoPermission {
+                        Button("Allow Discord profile pictures…") {
+                            if !CGRequestScreenCaptureAccess(), let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        }.font(.caption).buttonStyle(.link)
+                        .help("Allow Screen Recording to read the avatar area of visible Discord DM rows.")
+                    }
                     if calls.status == .needsAccessibility {
                         Button(calls.status.rawValue) {
                             SystemActionEngine.shared.refreshAccessibilityPermission(prompt: true)

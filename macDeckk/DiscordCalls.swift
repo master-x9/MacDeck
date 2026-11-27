@@ -1,4 +1,5 @@
 import AppKit
+import ScreenCaptureKit
 import ApplicationServices
 import Combine
 import OSLog
@@ -72,6 +73,8 @@ private nonisolated struct DiscordDestination: Equatable {
     let unread: Bool
     let count: String?
     var artworkURL: URL?
+    var avatarRect: CGRect?
+    var windowRect: CGRect?
 
     init?(name label: String, identifier: String, url: URL?, servers: Bool, directMessages: Bool) {
         let id = identifier.lowercased()
@@ -94,6 +97,7 @@ private nonisolated struct DiscordDestination: Equatable {
         unread = count.map { $0 != "0" } ?? (dm && label.localizedCaseInsensitiveContains("unread"))
         let clean = label.replacingOccurrences(of: pattern, with: "", options: .regularExpression)
             .replacingOccurrences(of: #"(?i)(?:^|,\s*)(?:unread|server|guild)(?:,|$)"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"(?i)\s*\(direct message(?:s)?\)\s*$"#, with: "", options: .regularExpression)
             .trimmingCharacters(in: CharacterSet(charactersIn: ", •:-").union(.whitespacesAndNewlines))
         guard !clean.isEmpty else { return nil }
         name = clean
@@ -105,6 +109,8 @@ private nonisolated struct DiscordDestination: Equatable {
 private nonisolated struct DiscordSnapshot: Equatable {
     var buttons = Set<DiscordCallButton>()
     var entries: [DiscordDestination] = []
+    var captureAllowed = false
+    var captureMinute = 0
     var avatar: URL?
     var active: Bool { !buttons.isDisjoint(with: [.disconnect, .cameraOn, .cameraOff, .answer, .share, .stopShare]) }
 }
@@ -125,6 +131,7 @@ final class DiscordCalls: ObservableObject {
     @Published private(set) var status = Status.checking
     private let logger = Logger(subsystem: "com.jk.MacDeck", category: "DiscordCalls")
     private var previous: DiscordSnapshot?
+    @Published private(set) var needsPhotoPermission = false
     private let sidebarArt = NSCache<NSURL, NSImage>()
     private var sidebarTask: Task<Void, Never>?
     private var avatarTask: Task<Void, Never>?
@@ -149,6 +156,10 @@ final class DiscordCalls: ObservableObject {
             var summary = ""
             var snapshot = DiscordSnapshot()
             _ = Self.controls(pid: pid, snapshot: &snapshot, summary: &summary)
+            if snapshot.entries.contains(where: { $0.direct }) {
+                snapshot.captureAllowed = CGPreflightScreenCaptureAccess()
+                snapshot.captureMinute = snapshot.captureAllowed ? Int(Date().timeIntervalSince1970 / 60) : 0
+            }
             let found = snapshot
             let scanSummary = summary
             Task { @MainActor in
@@ -184,6 +195,7 @@ final class DiscordCalls: ObservableObject {
         guard previous != snapshot || status != message else { return }
         previous = snapshot
         status = message
+        needsPhotoPermission = !snapshot.captureAllowed && snapshot.entries.contains { $0.direct && $0.artworkURL == nil }
         avatarTask?.cancel()
         sidebarTask?.cancel()
         guard message != .disabled else { page = nil; return }
@@ -208,15 +220,39 @@ final class DiscordCalls: ObservableObject {
         }
         page = result
         sidebarTask = Task {
+            var windows: [SCWindow]?
             for (index, entry) in snapshot.entries.enumerated() {
                 guard !Task.isCancelled else { return }
-                guard let url = entry.artworkURL, sidebarArt.object(forKey: url as NSURL) == nil,
-                      let (data, response) = try? await URLSession.shared.data(from: url),
-                      (response as? HTTPURLResponse)?.statusCode == 200, data.count <= 1_000_000,
-                      let image = NSImage(data: data), !Task.isCancelled, previous == snapshot else { continue }
-                sidebarArt.countLimit = 32
-                sidebarArt.setObject(image, forKey: url as NSURL)
-                page?.tiles[5 + index]?.iconData = Self.sidebarIcon(entry, image: image)
+                if let url = entry.artworkURL, sidebarArt.object(forKey: url as NSURL) != nil { continue }
+                var photo: NSImage?
+                if let url = entry.artworkURL, let (data, response) = try? await URLSession.shared.data(from: url),
+                   (response as? HTTPURLResponse)?.statusCode == 200, data.count <= 1_000_000 {
+                    photo = NSImage(data: data)
+                    if let photo {
+                        sidebarArt.countLimit = 32
+                        sidebarArt.setObject(photo, forKey: url as NSURL)
+                    }
+                }
+                if photo == nil, snapshot.captureAllowed, let rect = entry.avatarRect, let frame = entry.windowRect {
+                    if windows == nil {
+                        let content = try? await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
+                        windows = content?.windows.filter { $0.owningApplication?.processID == Self.discordPID } ?? []
+                    }
+                    if let window = windows?.first(where: { abs($0.frame.minX - frame.minX) < 2 && abs($0.frame.minY - frame.minY) < 2 &&
+                        abs($0.frame.width - frame.width) < 2 && abs($0.frame.height - frame.height) < 2 && $0.frame.contains(rect) }) {
+                        let config = SCStreamConfiguration()
+                        config.sourceRect = rect.offsetBy(dx: -window.frame.minX, dy: -window.frame.minY)
+                        config.width = 96
+                        config.height = 96
+                        config.showsCursor = false
+                        config.ignoreShadowsSingleWindow = true
+                        if let cg = try? await SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: window), configuration: config) {
+                            photo = NSImage(cgImage: cg, size: NSSize(width: 96, height: 96))
+                        }
+                    }
+                }
+                guard !Task.isCancelled, previous == snapshot else { return }
+                if let photo { page?.tiles[5 + index]?.iconData = Self.sidebarIcon(entry, image: photo) }
             }
         }
         if let url = snapshot.avatar?.appending(queryItems: [URLQueryItem(name: "size", value: "128")]), found.contains(.answer) {
@@ -328,6 +364,14 @@ final class DiscordCalls: ObservableObject {
             return value
         }
 
+        func bounds(_ node: AXUIElement) -> CGRect? {
+            guard let p = attribute(node, kAXPositionAttribute), CFGetTypeID(p) == AXValueGetTypeID(),
+                  let s = attribute(node, kAXSizeAttribute), CFGetTypeID(s) == AXValueGetTypeID() else { return nil }
+            var point = CGPoint.zero, size = CGSize.zero
+            guard AXValueGetValue(p as! AXValue, .cgPoint, &point), AXValueGetValue(s as! AXValue, .cgSize, &size) else { return nil }
+            return CGRect(origin: point, size: size)
+        }
+
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 0.3)
         AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue)
@@ -388,11 +432,18 @@ final class DiscordCalls: ObservableObject {
                     let dmRow = ["AXLink", "AXRow", "AXTreeItem", "AXRadioButton"].contains(role) || groupedItem
                     if var entry = DiscordDestination(name: title, identifier: id, url: url, servers: inServers,
                                                        directMessages: inDMs && dmRow), links[entry.key] == nil {
+                        let row = bounds(node)
+                        var exposedAvatar: CGRect?
                         var pending = Array(children.reversed()), limit = 30
                         while let child = pending.popLast(), limit > 0 {
                             limit -= 1
-                            if attribute(child, kAXRoleAttribute) as? String == "AXImage",
-                               let url = attribute(child, kAXURLAttribute) as? URL,
+                            let isImage = attribute(child, kAXRoleAttribute) as? String == "AXImage"
+                            if isImage, let box = bounds(child), let row, row.contains(box),
+                               (14...80).contains(box.width), abs(box.width - box.height) < 3, box.midX < row.midX {
+                                exposedAvatar = box
+                            }
+                            let imageRef = isImage ? attribute(child, kAXURLAttribute) : nil
+                            if let url = imageRef as? URL ?? (imageRef as? String).flatMap(URL.init(string:)),
                                url.scheme == "https", ["cdn.discordapp.com", "media.discordapp.net"].contains(url.host ?? ""),
                                ["/avatars/", "/embed/avatars/", "/icons/", "/channel-icons/"].contains(where: url.path.hasPrefix),
                                var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) {
@@ -401,6 +452,25 @@ final class DiscordCalls: ObservableObject {
                                 break
                             }
                             pending += (attribute(child, kAXChildrenAttribute) as? [AXUIElement] ?? []).reversed()
+                        }
+                        if let row, entry.direct, (28...80).contains(row.height), row.width >= row.height * 2,
+                           let window = attribute(node, kAXWindowAttribute), CFGetTypeID(window) == AXUIElementGetTypeID(),
+                           let frame = bounds(window as! AXUIElement), frame.contains(row) {
+                            let side = min(40, floor(row.height * 0.76))
+                            let box = exposedAvatar ?? CGRect(x: row.minX + 8, y: row.midY - side / 2, width: side, height: side)
+                            // Confirm this row actually occupies the crop (a scrolled-off or covered row must never supply another person's face).
+                            var hit: AXUIElement?
+                            AXUIElementCopyElementAtPosition(app, Float(box.midX), Float(box.midY), &hit)
+                            for _ in 0..<16 {
+                                guard let current = hit else { break }
+                                if CFEqual(current, node) {
+                                    entry.avatarRect = box
+                                    entry.windowRect = frame
+                                    break
+                                }
+                                guard let parent = attribute(current, kAXParentAttribute), CFGetTypeID(parent) == AXUIElementGetTypeID() else { break }
+                                hit = (parent as! AXUIElement)
+                            }
                         }
                         entries.append(entry)
                         links[entry.key] = node

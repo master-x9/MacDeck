@@ -99,6 +99,8 @@ def destination(name, identifier, value, in_servers, in_dms=False):
     count = match[1] if match else None
     unread = count != "0" if count else direct and "unread" in name.casefold()
     label = re.sub(r"(?:^|,\s*)(?:unread|server|guild)(?:,|$)", "", COUNT.sub("", name), flags=re.I).strip(" ,•:-\n")
+    if direct:
+        label = re.sub(r"\s*\(direct messages?\)$", "", label, flags=re.I).strip()
     if label:
         return ("dm:" if direct else "server:") + (path or (identifier if row_id else label.casefold())), (label, direct, unread, count)
 
@@ -117,15 +119,19 @@ def discord_page(found, entries, avatar=None, links=None):
     entries = {key: value for key, value in entries.items() if key not in identified}
     unread = [item for item in entries.items() if item[1][2]]
     selected = unread or [item for item in entries.items() if not item[1][1]] or list(entries.items())
+    frames = {}
     for slot, (key, (label, direct, unread, count)) in enumerate(selected[:5], 5):
         t = tile(CALL_ID, slot, "discordControl", "nav:" + key, label)
         art = None
         if links and key in links:
-            for child in links[key].descendants(control_type="Image"):
+            images = links[key].descendants(control_type="Image")
+            for child in images:
                 url = legacy_value(child)
                 if re.fullmatch(r"https://(?:cdn\.discordapp\.com|media\.discordapp\.net)/(?:avatars|embed/avatars|icons|channel-icons)/[\w./-]+(?:\?[^\s]*)?", url):
                     art = avatar_bytes(url)
                     break
+            if art is None and direct:
+                art = visible_dm_avatar(links[key], images, frames)
         t.iconData = icon("dm" if direct else "server", (count or "•") if unread else None, avatar=art, name=label)
         page.tiles[slot] = t
     return page
@@ -152,6 +158,54 @@ def avatar_bytes(url):
                 return raw
     except (OSError, ValueError):
         pass
+
+
+def visible_dm_avatar(row, images, frames):
+    from ctypes import windll
+    import win32gui
+    from PIL import ImageGrab
+
+    try:
+        hwnd = row.top_level_parent().handle
+        if not hwnd or win32gui.IsIconic(hwnd) or row.element_info.element.CurrentIsOffscreen:
+            return None
+        scale = (windll.user32.GetDpiForWindow(hwnd) or 96) / 96
+        r = row.rectangle()
+        if not (28 * scale <= r.height() <= 80 * scale and r.width() >= r.height() * 2):
+            return None
+        side = min(round(40 * scale), round(r.height() * .76))
+        x, y = r.left + round(8 * scale), r.top + (r.height() - side) // 2
+        box = (x, y, x + side, y + side)
+        for child in images:
+            b = child.rectangle()
+            if (14 * scale <= b.width() <= 80 * scale and abs(b.width() - b.height()) < 3 * scale
+                    and r.left <= b.left < b.right <= r.left + r.width() // 2
+                    and r.top <= b.top < b.bottom <= r.bottom):
+                box = (b.left, b.top, b.right, b.bottom)
+                break
+        if hwnd not in frames:
+            frames[hwnd] = ImageGrab.grab(window=hwnd)
+        frame = frames[hwnd]
+        left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+        if frame.size != (right - left, bottom - top):
+            if frame.size != win32gui.GetClientRect(hwnd)[2:]:
+                return None
+            left, top = win32gui.ClientToScreen(hwnd, (0, 0))
+        return crop_avatar(frame, (box[0]-left, box[1]-top, box[2]-left, box[3]-top))
+    except uia_errors() + (TypeError,):
+        return None
+
+
+def crop_avatar(frame, box):
+    if not (0 <= box[0] < box[2] <= frame.width and 0 <= box[1] < box[3] <= frame.height):
+        return None
+    crop = frame.crop(box).convert("RGB")
+    if all(low == high for low, high in crop.getextrema()):
+        return None
+    buffer = BytesIO()
+    crop.thumbnail((128, 128))
+    crop.save(buffer, format="PNG")
+    return buffer.getvalue()
 
 
 def caller_avatar(answer, decline):
