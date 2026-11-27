@@ -80,9 +80,9 @@ def call_buttons(buttons):
     return {k: v for k, v in found.items() if k in ("mute", "unmute", "deafen", "undeafen")}
 
 
-def destination(name, identifier, value, in_servers):
-    direct = ("/channels/@me/" in value or "private-channels-" in identifier or identifier.startswith("guildsnav___dm-"))
-    if not (direct or in_servers or re.fullmatch(r"guildsnav___[0-9]+", identifier)):
+def destination(name, identifier, value, in_servers, in_dms=False):
+    direct = (in_dms or "/channels/@me/" in value or "private-channels-" in identifier or identifier.startswith("guildsnav___dm-"))
+    if not (direct or in_servers or re.search(r"/channels/[0-9]+/?$", value) or re.fullmatch(r"guildsnav___[0-9]+", identifier)):
         return None
     if not name or "folder" in identifier or re.search(r"\b(folder|direct messages|add a server|discover servers|download apps)\b", name, re.I):
         return None
@@ -104,7 +104,7 @@ def discord_page(found, entries, avatar=None):
             t.iconData = icon(key, avatar=avatar if key == "answer" else None)
             page.tiles[slot] = t
     unread = [item for item in entries.items() if item[1][2]]
-    selected = unread or [item for item in entries.items() if not item[1][1]]
+    selected = unread or [item for item in entries.items() if not item[1][1]] or list(entries.items())
     for slot, (key, (label, direct, unread, count)) in enumerate(selected[:5], 5):
         t = tile(CALL_ID, slot, "discordControl", "nav:" + key, label)
         t.iconData = icon("dm" if direct else "server", (count or "•") if unread else None)
@@ -214,18 +214,29 @@ def discord_call(press=None):
         for hwnd in windows:
             window = Desktop(backend="uia").window(handle=hwnd).wrapper_object()
             nodes = window.descendants()
-            server_ids = set()
+            server_ids, dm_ids = set(), set()
+            item_roles = ("TreeItem", "ListItem", "Hyperlink", "Button", "RadioButton", "TabItem", "DataItem")
             for n in nodes:
-                if n.element_info.control_type in ("Tree", "Group", "List", "Pane", "Custom") and (n.element_info.name or "").casefold() in ("servers", "servers list"):
-                    server_ids.update(tuple(c.element_info.runtime_id or ()) for c in n.descendants() if c.element_info.control_type in ("TreeItem", "ListItem", "Hyperlink", "Button"))
+                if n.element_info.control_type not in ("Tree", "Group", "List", "Pane", "Custom", "Tab", "ToolBar", "Table"):
+                    continue
+                label = (n.element_info.name or "").strip().casefold()
+                if label in ("servers", "servers list", "servers sidebar", "server list", "guilds"):
+                    target = server_ids
+                elif label in ("direct messages", "private channels", "direct messages list"):
+                    target = dm_ids
+                else:
+                    continue
+                target.update(tuple(c.element_info.runtime_id) for c in n.descendants()
+                              if c.element_info.control_type in item_roles and c.element_info.runtime_id)
             for n in nodes:
                 info = n.element_info
                 if info.control_type in ("Button", "CheckBox"):
                     controls.append(n)
-                if info.control_type not in ("TreeItem", "ListItem", "Hyperlink", "Button"):
+                if info.control_type not in item_roles:
                     continue
                 value = legacy_value(n) if info.control_type == "Hyperlink" else ""
-                item = destination(info.name, info.automation_id or "", value, tuple(info.runtime_id or ()) in server_ids)
+                rid = tuple(info.runtime_id or ())
+                item = destination(info.name, info.automation_id or "", value, rid in server_ids, rid in dm_ids and info.control_type != "Button")
                 if item:
                     key, entry = item
                     entries.setdefault(key, entry)

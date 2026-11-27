@@ -72,12 +72,12 @@ private nonisolated struct DiscordDestination: Equatable {
     let unread: Bool
     let count: String?
 
-    init?(name label: String, identifier: String, url: URL?, servers: Bool, role: String) {
+    init?(name label: String, identifier: String, url: URL?, servers: Bool, directMessages: Bool) {
         let id = identifier.lowercased()
         let path = url?.path ?? ""
-        let dm = path.hasPrefix("/channels/@me/") || id.contains("private-channels-") || id.hasPrefix("guildsnav___dm-")
+        let dm = directMessages || path.hasPrefix("/channels/@me/") || id.contains("private-channels-") || id.hasPrefix("guildsnav___dm-")
         let server = id.range(of: #"^guildsnav___[0-9]+$"#, options: .regularExpression) != nil ||
-            (servers && ["AXRow", "AXTreeItem", "AXButton", "AXLink"].contains(role))
+            servers || path.range(of: #"^/channels/[0-9]+/?$"#, options: .regularExpression) != nil
         guard dm || server, !label.isEmpty, !id.contains("folder"),
               label.range(of: #"(?i)\b(folder|direct messages|add a server|discover servers|download apps)\b"#, options: .regularExpression) == nil else { return nil }
         let pattern = #"(?i)\b([0-9]+\+?)\s+(?:unread\s+)?(?:mentions?|messages?|notifications?)\b"#
@@ -291,6 +291,7 @@ final class DiscordCalls: ObservableObject {
         var nodes = Array(roots.reversed())
         var semanticButtons: [AXUIElement] = []
         var insideServers = Set<AXUIElement>()
+        var insideDMs = Set<AXUIElement>()
         var entries: [DiscordDestination] = []
         var links: [String: AXUIElement] = [:]
         var found: [DiscordCallButton: AXUIElement] = [:]
@@ -305,24 +306,50 @@ final class DiscordCalls: ObservableObject {
             let attrs = values as? [Any] ?? []
             let role = attrs.first as? String ?? attribute(node, kAXRoleAttribute) as? String
             let children = attrs.last as? [AXUIElement] ?? attribute(node, kAXChildrenAttribute) as? [AXUIElement] ?? []
-            nodes.append(contentsOf: children.reversed())
-            if let role {
-                let navRoles = ["AXOutline", "AXTree", "AXNavigation", "AXLandmarkNavigation", "AXList", "AXGroup"]
-                let itemRoles = ["AXRow", "AXTreeItem", "AXLink", "AXButton"]
-                if navRoles.contains(role) || itemRoles.contains(role) {
-                    let label = (attribute(node, kAXDescriptionAttribute) as? String).flatMap { $0.isEmpty ? nil : $0 } ?? attribute(node, kAXTitleAttribute) as? String ?? ""
-                    let servers = insideServers.contains(node)
-                    if servers || ["servers", "servers list"].contains(label.lowercased()) {
-                        insideServers.formUnion(children)
+            var descendants = children
+            if role == "AXOutline" || role == "AXTable" {
+                descendants += attribute(node, kAXRowsAttribute) as? [AXUIElement] ?? []
+            }
+            nodes.append(contentsOf: descendants.reversed())
+            let inServers = insideServers.contains(node)
+            let inDMs = insideDMs.contains(node)
+            let navRoles = ["AXOutline", "AXTree", "AXNavigation", "AXLandmarkNavigation", "AXList", "AXGroup", "AXTable", "AXRadioGroup", "AXTabGroup"]
+            let itemRoles = ["AXRow", "AXTreeItem", "AXRadioButton", "AXTab", "AXLink", "AXButton", "AXCell"]
+            if let role, navRoles.contains(role) || itemRoles.contains(role) {
+                let label = [kAXDescriptionAttribute, kAXTitleAttribute, "AXLabel"].lazy
+                    .compactMap { attribute(node, $0) as? String }.first { !$0.isEmpty } ?? ""
+                let classes = attribute(node, "AXDOMClassList") as? [String] ?? []
+                let listName = label.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                let isServers = navRoles.contains(role) && (["servers", "servers list", "servers sidebar", "server list", "guilds"].contains(listName) || classes.contains { $0.hasPrefix("guilds_") })
+                let isDMs = navRoles.contains(role) && (["direct messages", "private channels", "direct messages list"].contains(listName) || classes.contains { $0.hasPrefix("privateChannels_") })
+                if isServers { insideServers.formUnion(descendants) }
+                if isDMs { insideDMs.formUnion(descendants) }
+                let id = attribute(node, "AXDOMIdentifier") as? String ?? ""
+                let groupedItem = role == "AXGroup" && (id.hasPrefix("guildsnav___") || classes.contains { $0.hasPrefix("listItemWrapper_") || $0.hasPrefix("interactive_") })
+                if (itemRoles.contains(role) || groupedItem), !isServers, !isDMs {
+                    var title = label
+                    if title.isEmpty && (inServers || inDMs) {
+                        var pending = Array(children.reversed()), budget = 24
+                        while let child = pending.popLast(), budget > 0 && title.isEmpty {
+                            budget -= 1
+                            title = [kAXDescriptionAttribute, kAXTitleAttribute, kAXValueAttribute].lazy
+                                .compactMap { attribute(child, $0) as? String }.first { $0.contains(where: \.isLetter) } ?? ""
+                            pending += (attribute(child, kAXChildrenAttribute) as? [AXUIElement] ?? []).reversed()
+                        }
                     }
-                    if itemRoles.contains(role), let entry = DiscordDestination(name: label,
-                        identifier: attribute(node, "AXDOMIdentifier") as? String ?? "",
-                        url: attribute(node, kAXURLAttribute) as? URL, servers: servers, role: role), links[entry.key] == nil {
+                    let rawURL = attribute(node, kAXURLAttribute)
+                    let url = rawURL as? URL ?? (rawURL as? String).flatMap(URL.init(string:))
+                    let dmRow = ["AXLink", "AXRow", "AXTreeItem", "AXRadioButton"].contains(role) || groupedItem
+                    if let entry = DiscordDestination(name: title, identifier: id, url: url, servers: inServers,
+                                                       directMessages: inDMs && dmRow), links[entry.key] == nil {
                         entries.append(entry)
                         links[entry.key] = node
                     }
                 }
             }
+            // Chromium inserts scroll areas, splitters and other unnamed wrappers between landmarks and their rows.
+            if inServers { insideServers.formUnion(descendants) }
+            if inDMs { insideDMs.formUnion(descendants) }
             if role == "AXWebArea" {
                 webAreas += 1
                 // Chromium can expose buttons through semantic search even when a
@@ -356,7 +383,9 @@ final class DiscordCalls: ObservableObject {
         }
         summary = "roots=\(roots.count) nodes=\(seen.count) webAreas=\(webAreas) buttons=\(buttonCount) terms=\(hints.sorted()) actions=\(found.keys.map(\.rawValue).sorted())"
         let unread = entries.filter(\.unread)
-        snapshot.entries = Array((unread.isEmpty ? entries.filter { !$0.direct } : unread).prefix(5))
+        let servers = entries.filter { !$0.direct }
+        snapshot.entries = Array((!unread.isEmpty ? unread : !servers.isEmpty ? servers : entries).prefix(5))
+        summary += " sidebarEntries=\(entries.count) visibleTiles=\(snapshot.entries.count)"
         let hasVoiceControls = found[.mute] != nil || found[.unmute] != nil
         if let answer = found[.answer], let decline = found[.decline] {
             snapshot.avatar = callerAvatar(answer, decline: decline)

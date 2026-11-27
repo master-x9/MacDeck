@@ -51,6 +51,14 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(ringing.tiles[2].tileType.action, "answer")
         self.assertNotEqual(ringing.tiles[2].iconData, idle.tiles[2].iconData)
 
+    def test_sidebar_without_identifiers_or_unread_activity(self):
+        dm = destination("Casey", "", "", False, in_dms=True)
+        server = destination("Workshop", "", "", True)
+        self.assertEqual(discord_page({}, dict([dm])).tiles[5].customLabel, "Casey")
+        self.assertEqual(discord_page({}, dict([dm, server])).tiles[5].customLabel, "Workshop")
+        unread = destination("Casey, 2 unread messages", "", "", False, in_dms=True)
+        self.assertEqual(discord_page({}, dict([server, unread])).tiles[5].customLabel, "Casey")
+
     def test_paired_android_controls_obs(self):
         from websockets import serve, connect
 
