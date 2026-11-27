@@ -5,6 +5,10 @@ on:
       version:
         description: Windows beta version (for example 1.2.3-beta.1)
         required: true
+      release_tag:
+        description: Existing beta release tag to update
+        default: windows-1.2.3-beta.1
+        required: true
       notes:
         description: Beta release notes
         required: true
@@ -31,6 +35,9 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           Set-Content -Path notes.md -Value $env:RELEASE_NOTES
           ./release/windows.ps1 -Version $env:RELEASE_VERSION -Notes notes.md
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          python -B ./release/test-browser-windows.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         with:
           name: WinDeck-Windows-Beta
@@ -40,9 +47,10 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
           RELEASE_VERSION: ${{ inputs.version }}
         run: |
-          $tag = "windows-$env:RELEASE_VERSION"
+          $tag = $env:RELEASE_TAG
           $output = 'release/out/windows'
           $setup = Get-ChildItem "$output/*Setup.exe" | Select-Object -First 1
           if (-not $setup) { throw 'Windows installer is missing' }
@@ -50,9 +58,11 @@ jobs:
           $assets = Get-ChildItem "$output/*" -File | Where-Object { $_.Name -match '(Setup\.exe|\.nupkg|releases.*\.json|Portable\.zip)$' }
           $checksums = $assets | ForEach-Object { "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)" }
           Set-Content -Path "$output/SHA256SUMS.txt" -Value $checksums -Encoding utf8
-          gh release create $tag --target $env:GITHUB_SHA --title "WinDeck $env:RELEASE_VERSION — Windows Beta" --notes-file notes.md --draft --prerelease
-          if ($LASTEXITCODE) { throw 'Could not create beta release' }
-          gh release upload $tag @($assets.FullName) "$output/SHA256SUMS.txt"
+          gh release view $tag --json id
+          if ($LASTEXITCODE) { throw 'The existing beta release was not found' }
+          gh release upload $tag --clobber @($assets.FullName) "$output/SHA256SUMS.txt"
           if ($LASTEXITCODE) { throw 'Could not upload beta assets' }
-          gh release edit $tag --draft=false --prerelease --latest=false
+          gh api "repos/$env:GITHUB_REPOSITORY/git/refs/tags/$tag" --method PATCH -f "sha=$env:GITHUB_SHA" -F force=true
+          if ($LASTEXITCODE) { throw 'Could not update release source tag' }
+          gh release edit $tag --title "WinDeck $env:RELEASE_VERSION — Windows Beta" --notes-file notes.md --prerelease --latest=false
           if ($LASTEXITCODE) { throw 'Could not publish beta release' }

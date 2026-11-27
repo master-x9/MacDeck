@@ -31,8 +31,9 @@ if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
 from models import DeckTile, TileType, SystemControlAction
-from icons import get_icon, fetch_favicon, ICONS
+from icons import get_icon, fetch_favicon, normalize_custom_icon, ICONS
 from app_icons import get_app_icon
+from browser_tabs import read_browser_tabs
 from action_engine import ActionEngine, BROWSERS
 from page_store import PageStore, supported, BROWSER_PAGE_ID
 from integrations import OBS, OBS_ID, CALL_ID, discord_call, monitor
@@ -207,6 +208,29 @@ class WinDeckHttpServer(HTTPServer):
             )
             ps.set_tile(page_id, slot_index, tile)
 
+        elif path == "/api/edit_tile":
+            page = next((p for p in ps.pages if p.id == body.get("pageId")), None)
+            slot = body.get("slotIndex")
+            if page is None or type(slot) is not int or not 0 <= slot < len(page.tiles) or page.tiles[slot] is None:
+                return {"success": False, "error": "Choose a configured tile on an editable page."}
+            tile = page.tiles[slot]
+            icon = tile.iconData
+            custom = tile.customIcon
+            if "customIcon" in body:
+                if body["customIcon"] is None:
+                    kind = tile.tileType
+                    icon = get_app_icon(kind.bundleIdentifier, kind.name or "App") if kind.type == "app" else (fetch_favicon(kind.url) if kind.type == "website" else None) or get_icon(kind.action or kind.type)
+                    custom = False
+                else:
+                    try:
+                        icon = normalize_custom_icon(body["customIcon"])
+                        custom = True
+                    except ValueError as error:
+                        return {"success": False, "error": str(error)}
+            tile.customLabel = body.get("customLabel") or None
+            tile.iconData, tile.customIcon = icon, custom
+            ps.notify_changes()
+
         elif path == "/api/clear_tile":
             page_id = body.get("pageId")
             slot_index = body.get("slotIndex")
@@ -368,7 +392,7 @@ class WinDeckApp:
         # Repair artwork in existing decks as well as newly assigned tiles.
         for page in list(self.page_store.pages):
             for tile in list(page.tiles):
-                if not tile:
+                if not tile or tile.customIcon:
                     continue
                 kind = tile.tileType
                 if kind.type == "app":
@@ -453,6 +477,11 @@ class WinDeckApp:
                 last_keyboard_check = time.monotonic()
             self.page_store.refresh_running_apps()
             foreground = self.action_engine.foreground_executable()
+            if foreground in BROWSERS and self.page_store.show_browser_control_page:
+                tabs = await asyncio.to_thread(read_browser_tabs)
+                if tabs != self.page_store.browser_tabs:
+                    self.page_store.browser_tabs = tabs
+                    self.page_store.notify_changes()
             self.page_store.set_browser_active(foreground in BROWSERS)
             target = None
             discord = self.page_store.live_pages.get(CALL_ID) if self.page_store.show_discord else None

@@ -10,7 +10,7 @@ import ssl
 import certifi
 from functools import lru_cache
 from io import BytesIO
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 from typing import Optional
 
 ICONS = {
@@ -48,9 +48,57 @@ _favicon_cache = {}
 _https_context = ssl.create_default_context()
 _https_context.load_verify_locations(cafile=certifi.where())
 
+def normalize_custom_icon(data):
+    if not isinstance(data, str) or len(data) > 7*1024*1024:
+        raise ValueError("Choose an image smaller than 5 MB.")
+    try:
+        raw = base64.b64decode(data, validate=True)
+        if len(raw) > 5*1024*1024:
+            raise ValueError("Image too large")
+        with Image.open(BytesIO(raw)) as source:
+            if source.width * source.height > 16_000_000:
+                raise ValueError("Image dimensions too large")
+            image = source.convert("RGBA")
+            image.thumbnail((256,256), Image.Resampling.LANCZOS)
+            output = BytesIO(); image.save(output, "PNG")
+            return base64.b64encode(output.getvalue()).decode("ascii")
+    except Exception as error:
+        raise ValueError("Choose a valid PNG, JPG, WebP, GIF or ICO image (up to 5 MB and 16 megapixels).") from error
+
+
+@lru_cache(maxsize=10)
+def browser_icon(action):
+    scale = 3
+    image = Image.new("RGBA", (128*scale, 128*scale))
+    draw = ImageDraw.Draw(image)
+    color = "#99999e" if action in ("back", "forward") else "#28c84f" if action == "newTab" else "#ff424d" if action == "closeTab" else "#079bf5"
+    draw.rounded_rectangle((4*scale,4*scale,124*scale,124*scale),radius=22*scale,fill=color)
+    def line(points):
+        draw.line([(int(x*scale),int(y*scale)) for x,y in points],fill="white",width=4*scale,joint="curve")
+    if action.startswith("switchTab"):
+        draw.ellipse((37*scale,37*scale,91*scale,91*scale),fill="#4cb7f9")
+        draw.text((64*scale,64*scale),action[-1],font=ImageFont.load_default(size=40*scale),anchor="mm",fill="white")
+    elif action in ("back","forward"):
+        points=[(40,44),(20,64),(40,84)]
+        if action == "forward": points=[(128-x,y) for x,y in points]
+        line(points);line([(22,64),(106,64)])
+    elif action == "refresh":
+        draw.arc((35*scale,35*scale,93*scale,93*scale),0,285,fill="white",width=4*scale)
+        line([(67,25),(79,35),(67,46)])
+    elif action == "newTab":
+        line([(64,31),(64,97)]);line([(31,64),(97,64)])
+    else:
+        line([(35,35),(93,93)]);line([(93,35),(35,93)])
+    image=image.resize((128,128),Image.Resampling.LANCZOS)
+    output=BytesIO();image.save(output,"PNG")
+    return base64.b64encode(output.getvalue()).decode("ascii")
+
+
 @lru_cache(maxsize=128)
 def get_icon(action_or_type: str) -> Optional[str]:
     """Resolves a base64 icon string for a given action or tile type."""
+    if action_or_type in ("switchTab1", "switchTab2", "switchTab3", "switchTab4", "switchTab5", "back", "forward", "refresh", "newTab", "closeTab"):
+        return browser_icon(action_or_type)
     if action_or_type in ICONS:
         with Image.open(BytesIO(base64.b64decode(ICONS[action_or_type]))) as source:
             image = source.convert("RGBA")

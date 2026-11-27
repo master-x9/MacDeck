@@ -199,3 +199,16 @@ dialog::backdrop { background: #0009; }
 
 #checkUpdates { font-size: 12px; white-space: nowrap; }
 #appVersion { font-size: 10px; }
+
+.keycap, .library-item { touch-action: none; user-select: none; }
+.keycap img, .library-item img { pointer-events: none; -webkit-user-drag: none; }
+.tile-actions { position: absolute; top: 6px; left: 6px; right: 6px; display: flex; justify-content: space-between; opacity: 0; pointer-events: none; }
+.keycap:hover .tile-actions, .keycap:focus-within .tile-actions, .keycap.selected .tile-actions { opacity: 1; pointer-events: auto; }
+.tile-action { width: 25px; height: 25px; padding: 5px; border: 0; border-radius: 50%; color: white; background: #e53591; display: grid; place-items: center; box-shadow: 0 2px 5px #0005; cursor: pointer; }
+.tile-action svg { width: 14px; height: 14px; }.tile-remove { background: #f43e4c; font-size: 22px; line-height: 15px; }
+.keycap.drop-target { border: 2px solid #f4479c; background: #472639; }
+.tile-drag-preview { position: fixed; z-index: 1000; pointer-events: none; display: grid; place-items: center; gap: 5px; width: 90px; height: 90px; padding: 12px; border: 1px solid #f4479c; border-radius: 16px; background: #292929ee; box-shadow: 0 12px 30px #0008; }
+.tile-drag-preview img { width: 36px; height: 36px; object-fit: contain; }.tile-drag-preview .keycap-slot-num { display: none; }
+.dragging-tile, .dragging-tile * { cursor: grabbing !important; }
+.icon-editor { display: flex; align-items: center; gap: 16px; }.edit-icon-preview { width: 72px; height: 72px; object-fit: contain; }.icon-editor p { color: var(--text-secondary); font-size: 12px; }.icon-editor input { margin-bottom: 12px; max-width: 100%; }
+@media (hover: none) { .tile-actions { opacity: 1; pointer-events: auto; } }

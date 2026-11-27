@@ -168,6 +168,7 @@ class DeckTile:
     id: str = field(default_factory=lambda: str(uuid.uuid4()).upper())
     customLabel: Optional[str] = None
     iconData: Optional[str] = None  # Base64 encoded PNG
+    customIcon: bool = False
 
     @property
     def label(self) -> str:
@@ -183,6 +184,8 @@ class DeckTile:
             d["customLabel"] = self.customLabel
         if self.iconData is not None:
             d["iconData"] = self.iconData
+        if self.customIcon:
+            d["customIcon"] = True
         return d
 
     @classmethod
@@ -193,6 +196,7 @@ class DeckTile:
             tileType=TileType.from_dict(data.get("tileType", {})),
             customLabel=data.get("customLabel"),
             iconData=data.get("iconData"),
+            customIcon=bool(data.get("customIcon", False)),
         )
 
 

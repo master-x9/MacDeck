@@ -65,10 +65,12 @@ async function init() {
 }
 
 async function fetchState() {
+  if (tileDrag || editModal.style.display === "flex") return;
   try {
     const res = await fetch("/api/state");
     if (!res.ok) return;
     const data = await res.json();
+    if (tileDrag || editModal.style.display === "flex") return;
     if (JSON.stringify(appState) !== JSON.stringify(data)) {
       appState = data;
       render();
@@ -210,31 +212,17 @@ function renderGrid() {
   selectedSlotIndex = Math.min(selectedSlotIndex, rows * 5 - 1);
   for (let i = 0; i < rows * 5; i++) {
     const tile = tiles[i];
-    const keycap = document.createElement("button");
+    const keycap = document.createElement("div");
+    keycap.setAttribute("role", "button");
+    keycap.tabIndex = 0;
     keycap.className = `keycap ${tile ? "" : "empty"} ${selectedSlotIndex === i ? "selected" : ""}`;
     keycap.dataset.slot = i;
     keycap.setAttribute("aria-label", `Slot ${i + 1}, ${tile?.customLabel || tile?.tileType?.name || tile?.tileType?.action || "Empty"}`);
 
-    // Drag & Drop
-    keycap.draggable = Boolean(tile) && !activePage?.readOnly;
-    keycap.addEventListener("dragstart", (e) => {
-      e.dataTransfer.setData("text/plain", JSON.stringify({ type: "slot", slotIndex: i }));
-    });
-    keycap.addEventListener("dragover", (e) => e.preventDefault());
-    keycap.addEventListener("drop", (e) => {
-      e.preventDefault();
-      if (activePage.readOnly) return;
-      const raw = e.dataTransfer.getData("text/plain");
-      if (!raw) return;
-      try {
-        const payload = JSON.parse(raw);
-        if (payload.type === "slot") {
-          postApi("/api/swap_tiles", { pageId: activePage.id, slotA: payload.slotIndex, slotB: i });
-        } else if (payload.type === "library") {
-          postApi("/api/set_tile", { pageId: activePage.id, slotIndex: i, tileType: payload.tileType });
-        }
-      } catch (err) {}
-    });
+    if (!activePage.readOnly) {
+      keycap.dataset.dropSlot = i;
+      if (tile) enableTileDrag(keycap, {type:"slot", pageId:activePage.id, slotIndex:i});
+    }
 
     if (tile) {
       const label = tileLabel(tile);
@@ -244,6 +232,25 @@ function renderGrid() {
       `;
       keycap.insertBefore(artwork(tile.iconData, "keycap-icon", tile.tileType?.type), keycap.querySelector(".keycap-label"));
       keycap.title = label;
+      if (!activePage.readOnly) {
+        const actions = document.createElement("span");
+        actions.className = "tile-actions";
+        for (const [kind, title, icon] of [["edit", "Edit tile", uiIcon("edit")], ["remove", "Remove tile", "−"]]) {
+          const button = document.createElement("button");
+          button.className = `tile-action tile-${kind}`;
+          button.setAttribute("aria-label", `${title} ${i + 1}`);
+          button.title = title;
+          button.innerHTML = icon;
+          button.onpointerdown = event => event.stopPropagation();
+          button.onclick = event => {
+            event.stopPropagation(); selectedSlotIndex = i;
+            if (kind === "edit") openModal(i, tile);
+            else postApi("/api/clear_tile", {pageId:activePage.id, slotIndex:i});
+          };
+          actions.append(button);
+        }
+        keycap.append(actions);
+      }
     } else {
       keycap.innerHTML = `
         <span class="keycap-slot-num">${i + 1}</span>
@@ -252,6 +259,7 @@ function renderGrid() {
     }
 
     keycap.addEventListener("click", () => {
+      if (performance.now() < suppressTileClickUntil) return;
       if (activePage.readOnly) {
         if (tile) postApi("/api/trigger_live_slot", {pageId: activePage.id, slotIndex: i});
         return;
@@ -261,7 +269,7 @@ function renderGrid() {
     });
 
     keycap.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !activePage.readOnly) { e.preventDefault(); selectedSlotIndex = i; openModal(i, tile); }
+      if (e.target === keycap && e.key === "Enter" && !activePage.readOnly) { e.preventDefault(); selectedSlotIndex = i; openModal(i, tile); }
     });
     keycap.addEventListener("dblclick", () => {
       if (!activePage.readOnly) openModal(i, tile);
@@ -294,9 +302,8 @@ function renderLibrary() {
   filtered.forEach(it => {
     const el = document.createElement("button");
     el.className = "library-item";
-    el.draggable = true;
     const tileType = {type:it.type, name:it.macro || it.name, action:it.action, url:it.url, bundleIdentifier:it.path || it.bundleIdentifier};
-    el.ondragstart = event => event.dataTransfer.setData("text/plain", JSON.stringify({type:"library", tileType}));
+    enableTileDrag(el, {type:"library", tileType, customLabel:it.macro ? it.name : null});
     el.append(artwork(it.iconData, "library-item-icon", it.type));
     const label = document.createElement("span");
     label.className = "library-item-label";
@@ -304,6 +311,7 @@ function renderLibrary() {
     el.append(label);
     el.title = it.macro ? `${it.name} · ${it.macro}` : it.name;
     el.onclick = async () => {
+      if (performance.now() < suppressTileClickUntil) return;
       if (await postApi("/api/set_tile", {pageId:appState.selectedPageId, slotIndex:selectedSlotIndex, tileType, customLabel:it.macro ? it.name : null})) {
         showToast(`${it.name} assigned to slot ${selectedSlotIndex + 1}`);
       }
@@ -340,6 +348,7 @@ function artwork(data, className, type) {
   img.className = className;
   img.src = `data:image/png;base64,${data}`;
   img.alt = "";
+  img.draggable = false;
   img.onerror = () => img.replaceWith(fallback());
   return img;
 }
@@ -353,10 +362,68 @@ function showToast(message) {
   toastTimer = setTimeout(() => { toast.hidden = true; }, 3000);
 }
 
+// Pointer dragging works in WebView2 and with touch, without native image dragging.
+let tileDrag = null;
+let suppressTileClickUntil = 0;
+function enableTileDrag(element, payload) {
+  element.draggable = false;
+  element.addEventListener("dragstart", event => event.preventDefault());
+  element.addEventListener("pointerdown", event => {
+    if (event.button !== 0 || event.target.closest(".tile-action")) return;
+    tileDrag = {payload, element, id:event.pointerId, x:event.clientX, y:event.clientY, active:false};
+    element.setPointerCapture(event.pointerId);
+  });
+}
+document.addEventListener("pointermove", event => {
+  if (!tileDrag || event.pointerId !== tileDrag.id) return;
+  const drag = tileDrag;
+  if (!drag.active && Math.hypot(event.clientX-drag.x, event.clientY-drag.y) < 7) return;
+  event.preventDefault();
+  if (!drag.active) {
+    drag.active = true;
+    drag.ghost = drag.element.cloneNode(true);
+    drag.ghost.className = "tile-drag-preview";
+    drag.ghost.removeAttribute("id"); drag.ghost.querySelectorAll(".tile-actions").forEach(el=>el.remove());
+    document.body.append(drag.ghost);
+    document.body.classList.add("dragging-tile");
+  }
+  drag.ghost.style.left = `${event.clientX+14}px`; drag.ghost.style.top = `${event.clientY+14}px`;
+  document.querySelectorAll(".drop-target").forEach(el=>el.classList.remove("drop-target"));
+  const target = document.elementFromPoint(event.clientX,event.clientY)?.closest("[data-drop-slot]");
+  target?.classList.add("drop-target");
+}, {passive:false});
+function finishTileDrag(event, cancelled=false) {
+  if (!tileDrag || event.pointerId !== tileDrag.id) return;
+  const drag = tileDrag;
+  tileDrag = null;
+  drag.ghost?.remove(); document.body.classList.remove("dragging-tile");
+  document.querySelectorAll(".drop-target").forEach(el=>el.classList.remove("drop-target"));
+  if (!drag.active) return;
+  suppressTileClickUntil = performance.now()+400;
+  const target = !cancelled && document.elementFromPoint(event.clientX,event.clientY)?.closest("[data-drop-slot]");
+  if (!target) return;
+  const slotIndex = Number(target.dataset.dropSlot);
+  selectedSlotIndex = slotIndex;
+  if (drag.payload.type === "slot") {
+    postApi("/api/swap_tiles", {pageId:drag.payload.pageId, slotA:drag.payload.slotIndex, slotB:slotIndex});
+  } else {
+    postApi("/api/set_tile", {pageId:appState.selectedPageId, slotIndex, tileType:drag.payload.tileType, customLabel:drag.payload.customLabel});
+  }
+}
+document.addEventListener("pointerup", event=>finishTileDrag(event));
+document.addEventListener("pointercancel", event=>finishTileDrag(event,true));
+
 // -----------------------------------------------------------------------------
 // Modal
 // -----------------------------------------------------------------------------
+let editingTile = null;
+let editedIcon = undefined;
 function openModal(slotIndex, tile) {
+  selectedSlotIndex = slotIndex;
+  editingTile = {pageId:appState.selectedPageId, slotIndex};
+  editedIcon = undefined;
+  document.getElementById("tileIconFile").value = "";
+  document.getElementById("tileIconPreview").replaceChildren(artwork(tile?.iconData, "edit-icon-preview", tile?.tileType?.type));
   modalSlotIndex.textContent = slotIndex + 1;
   modalTileLabel.value = tile?.customLabel || "";
   modalTileInfo.textContent = tile
@@ -367,6 +434,7 @@ function openModal(slotIndex, tile) {
 
 function closeModal() {
   editModal.style.display = "none";
+  editingTile = null;
 }
 
 // -----------------------------------------------------------------------------
@@ -525,20 +593,29 @@ function setupEventListeners() {
 
   btnCloseModal.addEventListener("click", closeModal);
 
-  btnModalSave.addEventListener("click", () => {
-    const activePage = appState.pages.find((p) => p.id === appState.selectedPageId);
-    if (!activePage) return;
-    const tile = activePage.tiles[selectedSlotIndex];
-    if (tile) {
-      tile.customLabel = modalTileLabel.value.trim() || null;
-      postApi("/api/set_tile", {
-        pageId: activePage.id,
-        slotIndex: selectedSlotIndex,
-        tileType: tile.tileType,
-        customLabel: tile.customLabel,
+  document.getElementById("tileIconFile").onchange = async event => {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { showToast("Choose an image smaller than 5 MB."); return; }
+    try {
+      const data = await new Promise((resolve, reject) => {
+        const reader = new FileReader(); reader.onload = () => resolve(reader.result.split(",")[1]); reader.onerror = reject; reader.readAsDataURL(file);
       });
-    }
-    closeModal();
+      editedIcon = data;
+      const img = document.createElement("img"); img.className = "edit-icon-preview";
+      img.src = `data:${file.type};base64,${data}`; img.alt = "Selected tile icon";
+      document.getElementById("tileIconPreview").replaceChildren(img);
+    } catch { showToast("This image could not be opened."); }
+  };
+  document.getElementById("resetTileIcon").onclick = () => {
+    editedIcon = null;
+    document.getElementById("tileIconPreview").textContent = "Default icon will be restored";
+  };
+  btnModalSave.addEventListener("click", async () => {
+    if (!editingTile) return;
+    const body = {...editingTile, customLabel:modalTileLabel.value.trim() || null};
+    if (editedIcon !== undefined) body.customIcon = editedIcon;
+    if (await postApi("/api/edit_tile", body)) closeModal();
   });
 
   btnModalClearSlot.addEventListener("click", () => {

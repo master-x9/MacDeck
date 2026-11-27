@@ -65,7 +65,7 @@ class BrowserPageProvider:
     browser_page_id = BROWSER_PAGE_ID
 
     @classmethod
-    def get_browser_page(cls) -> DeckPage:
+    def get_browser_page(cls, tabs=None) -> DeckPage:
         actions = [
             (0, BrowserControlAction.switchTab1),
             (1, BrowserControlAction.switchTab2),
@@ -80,11 +80,13 @@ class BrowserPageProvider:
         ]
         tiles: List[Optional[DeckTile]] = [None] * 20
         for slot, act in actions:
+            tab = (tabs or [])[slot] if slot < min(5, len(tabs or [])) else {}
             tiles[slot] = DeckTile(
                 id=str(uuid.uuid5(uuid.UUID(cls.browser_page_id), str(slot))).upper(),
                 slotIndex=slot,
                 tileType=TileType(type="browserControl", action=act.value),
-                iconData=get_icon(act.value),
+                iconData=tab.get("iconData") or get_icon(act.value),
+                customLabel=tab.get("title") or act.display_name,
             )
         return DeckPage(
             id=cls.browser_page_id,
@@ -167,6 +169,7 @@ class PageStore:
         self.show_browser_control_page: bool = True
 
         self.browser_active = False
+        self.browser_tabs = []
         self.running_apps = []
         self.live_pages = {}
         self.grid_rows = 2
@@ -253,7 +256,7 @@ class PageStore:
         """Returns all pages: dynamic pages (if enabled) followed by user pages."""
         pages_list: List[DeckPage] = []
         if self.show_browser_control_page and self.browser_active:
-            pages_list.append(BrowserPageProvider.get_browser_page())
+            pages_list.append(BrowserPageProvider.get_browser_page(self.browser_tabs))
         if self.show_running_apps_page:
             pages_list.append(self.get_running_apps_page())
         pages_list.extend(p for p in self.live_pages.values()
