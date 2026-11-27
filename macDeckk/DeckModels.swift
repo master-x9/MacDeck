@@ -168,13 +168,19 @@ enum DiscordControlAction: Codable, Hashable {
     case openChannel(guildID: String, channelID: String, isDM: Bool)
 
     case call(DiscordCallButton)
+    case sidebar(String)
 
-    private enum CodingKeys: String, CodingKey { case kind, guildID, channelID, isDM, button }
-    private enum Kind: String, Codable { case openChannel, call }
+    private enum CodingKeys: String, CodingKey { case kind, guildID, channelID, isDM, button, key }
+    private enum Kind: String, Codable { case openChannel, call, sidebar }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        if try c.decode(Kind.self, forKey: .kind) == .call {
+        let kind = try c.decode(Kind.self, forKey: .kind)
+        if kind == .sidebar {
+            self = .sidebar(try c.decode(String.self, forKey: .key))
+            return
+        }
+        if kind == .call {
             self = .call(try c.decode(DiscordCallButton.self, forKey: .button))
             return
         }
@@ -187,6 +193,11 @@ enum DiscordControlAction: Codable, Hashable {
 
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
+        if case .sidebar(let key) = self {
+            try c.encode(Kind.sidebar, forKey: .kind)
+            try c.encode(key, forKey: .key)
+            return
+        }
         if case .call(let button) = self {
             try c.encode(Kind.call, forKey: .kind)
             try c.encode(button, forKey: .button)

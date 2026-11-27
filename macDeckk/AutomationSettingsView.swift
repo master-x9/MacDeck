@@ -140,7 +140,7 @@ struct AutomationSettingsView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Discord calls")
                 .font(.headline)
-            Text("Allow MacDeck in System Settings → Privacy & Security → Accessibility. Keep the Discord desktop window open with English controls. Its available call buttons appear on a live page, including mute, camera and disconnect.")
+            Text("Allow MacDeck in System Settings → Privacy & Security → Accessibility. Keep the Discord desktop window open with English controls. The first row controls microphone, deafen, calls, camera and screen sharing. The second row shows unread conversations or servers from the Discord sidebar.")
                 .font(.caption)
             Divider()
             Text("Pinned channels (optional)").font(.headline)

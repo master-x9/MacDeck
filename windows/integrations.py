@@ -4,6 +4,12 @@ import base64
 import hashlib
 import json
 import logging
+import re
+from functools import lru_cache
+from io import BytesIO
+
+from PIL import Image
+from discord_icons import icon
 import sys
 import threading
 import uuid
@@ -11,22 +17,41 @@ import uuid
 from icons import get_icon
 from models import DeckPage, DeckTile, TileType
 
+@lru_cache(maxsize=1)
+def uia_errors():
+    errors = (AttributeError, OSError, RuntimeError, NotImplementedError)
+    if sys.platform == "win32":
+        from comtypes import COMError
+        from pywinauto.uia_defines import NoPatternInterfaceError
+        return errors + (COMError, NoPatternInterfaceError)
+    return errors
+
+
 OBS_ID = "00000000-0000-0000-0000-000000000005"
 CALL_ID = "00000000-0000-0000-0000-000000000006"
 CALL_LABELS = {
-    "mute": ("Mute", "Mute Microphone"),
-    "unmute": ("Unmute", "Unmute Microphone"),
-    "cameraOn": ("Camera On", "Turn On Camera", "Turn Camera On", "Start Video", "Enable Camera", "Turn On Video"),
-    "cameraOff": ("Camera Off", "Turn Off Camera", "Turn Camera Off", "Stop Video", "Disable Camera", "Turn Off Video"),
+    "mute": ("Mute", "Mute Microphone", "Mute Audio", "Mute Yourself"),
+    "unmute": ("Unmute", "Unmute Microphone", "Unmute Audio", "Unmute Yourself"),
+    "deafen": ("Deafen", "Deafen Audio", "Deafen Yourself"),
+    "undeafen": ("Undeafen", "Undeafen Audio", "Undeafen Yourself"),
+    "cameraOn": ("Turn On Camera", "Turn Camera On", "Start Video", "Enable Camera", "Turn On Video"),
+    "cameraOff": ("Turn Off Camera", "Turn Camera Off", "Stop Video", "Disable Camera", "Turn Off Video"),
+    "share": ("Share Screen", "Share Your Screen", "Screen Share", "Start Screen Share"),
+    "stopShare": ("Stop Sharing", "Stop Streaming", "Stop Sharing Your Screen", "Stop Screen Share"),
     "disconnect": ("Disconnect", "Leave Call", "Disconnect from Voice", "Disconnect Call", "End Call", "Hang Up", "Leave Voice Channel"),
-    "answer": ("Answer", "Accept", "Accept Call", "Answer Call", "Join Call"),
+    "answer": ("Answer", "Accept", "Accept Call", "Answer Call", "Accept Incoming Call", "Join Call", "Join Voice Call", "Accept Voice Call", "Accept Video Call"),
     "decline": ("Decline", "Decline Call"),
+    "openDiscord": ("Discord",),
+    "toggleMute": ("Toggle Mute",),
+    "toggleDeafen": ("Toggle Deafen",),
 }
-CALL_NAMES = {name.casefold(): key for key, names in CALL_LABELS.items() for name in names}
+CALL_NAMES = {name.casefold(): key for key, names in CALL_LABELS.items() if key not in ("openDiscord", "toggleMute", "toggleDeafen") for name in names}
+SLOTS = [("unmute", "mute", "toggleMute"), ("undeafen", "deafen", "toggleDeafen"), ("answer", "disconnect", "openDiscord"),
+         ("cameraOff", "cameraOn"), ("stopShare", "share")]
+COUNT = re.compile(r"\b([0-9]+\+?)\s+(?:unread\s+)?(?:mentions?|messages?|notifications?)\b", re.I)
 
 
 def tile(page_id, slot, kind, action, label, name=None):
-    # Stable IDs keep polling from rebuilding an unchanged phone page.
     return DeckTile(slotIndex=slot, tileType=TileType(type=kind, action=action, name=name),
                     customLabel=label, iconData=get_icon(kind),
                     id=str(uuid.uuid5(uuid.UUID(page_id), str(slot))).upper())
@@ -37,27 +62,137 @@ def call_buttons(buttons):
     for button in buttons:
         name = (button.element_info.name or "").partition("\n")[0].partition(" (")[0].strip().casefold()
         key = CALL_NAMES.get(name)
-        if key and button.is_enabled():
-            if key == "mute" and button.element_info.control_type == "CheckBox" and button.get_toggle_state() == 1:
-                key = "unmute"
-            found[key] = button
-    if "disconnect" in found or (found.keys() & {"mute", "unmute"} and found.keys() & {"cameraOn", "cameraOff"}):
-        return {k: v for k, v in found.items() if k not in ("answer", "decline")}
+        if not key or not button.is_enabled():
+            continue
+        try:
+            checked = button.get_toggle_state() == 1
+        except uia_errors():
+            checked = False
+        if checked:
+            key = {"mute": "unmute", "deafen": "undeafen", "cameraOn": "cameraOff", "share": "stopShare"}.get(key, key)
+        found[key] = button
     if "answer" in found and "decline" in found:
-        return {k: found[k] for k in ("answer", "decline")}
-    return {}
+        return {k: v for k, v in found.items() if k != "disconnect"}
+    found.pop("answer", None)
+    found.pop("decline", None)
+    if "disconnect" in found or (found.keys() & {"mute", "unmute"} and found.keys() & {"cameraOn", "cameraOff"}):
+        return found
+    return {k: v for k, v in found.items() if k in ("mute", "unmute", "deafen", "undeafen")}
+
+
+def destination(name, identifier, value, in_servers):
+    direct = ("/channels/@me/" in value or "private-channels-" in identifier or identifier.startswith("guildsnav___dm-"))
+    if not (direct or in_servers or re.fullmatch(r"guildsnav___[0-9]+", identifier)):
+        return None
+    if not name or "folder" in identifier or re.search(r"\b(folder|direct messages|add a server|discover servers|download apps)\b", name, re.I):
+        return None
+    match = COUNT.search(name)
+    count = match[1] if match else None
+    unread = count != "0" if count else direct and "unread" in name.casefold()
+    label = re.sub(r"(?:^|,\s*)(?:unread|server|guild)(?:,|$)", "", COUNT.sub("", name), flags=re.I).strip(" ,•:-\n")
+    if label:
+        return ("dm:" if direct else "server:") + (identifier or value or label), (label, direct, unread, count)
+
+
+def discord_page(found, entries, avatar=None):
+    active = found.keys() & {"disconnect", "cameraOn", "cameraOff", "share", "stopShare"}
+    page = DeckPage(id=CALL_ID, name="Incoming Discord Call" if "answer" in found else "Discord Call" if active else "Discord", pageNumber=-4)
+    for slot, options in enumerate(SLOTS):
+        key = next((k for k in options if k in found or k == "openDiscord"), None)
+        if key:
+            t = tile(CALL_ID, slot, "discordControl", key, CALL_LABELS[key][0])
+            t.iconData = icon(key, avatar=avatar if key == "answer" else None)
+            page.tiles[slot] = t
+    unread = [item for item in entries.items() if item[1][2]]
+    selected = unread or [item for item in entries.items() if not item[1][1]]
+    for slot, (key, (label, direct, unread, count)) in enumerate(selected[:5], 5):
+        t = tile(CALL_ID, slot, "discordControl", "nav:" + key, label)
+        t.iconData = icon("dm" if direct else "server", (count or "•") if unread else None)
+        page.tiles[slot] = t
+    return page
+
+
+def legacy_value(control):
+    from pywinauto.uia_defines import get_elem_interface
+    try:
+        return str(get_elem_interface(control.element_info.element, "LegacyIAccessible").CurrentValue or "")
+    except uia_errors():
+        return ""
+
+
+@lru_cache(maxsize=8)
+def avatar_bytes(url):
+    # Fetch only Discord's small rendered avatar, never arbitrary links from a chat.
+    from urllib.request import urlopen
+    try:
+        with urlopen(url.split("?")[0] + "?size=128", timeout=2) as response:
+            raw = response.read(256 * 1024)
+        with Image.open(BytesIO(raw)) as image:
+            if image.width <= 512 and image.height <= 512:
+                image.load()
+                return raw
+    except (OSError, ValueError):
+        pass
+
+
+def caller_avatar(answer, decline):
+    parent = answer
+    for _ in range(10):
+        parent = parent.parent()
+        if parent is None or parent.element_info.control_type in ("Document", "Window"):
+            break
+        # A caller panel is small. Stop before reaching the rest of the Discord window.
+        children = parent.descendants()
+        if len(children) > 80:
+            break
+        if not any(c == decline for c in children):
+            continue
+        images = [c for c in children if c.element_info.control_type == "Image"]
+        urls = {legacy_value(c) for c in images}
+        avatars = [u for u in urls if re.fullmatch(r"https://(?:cdn\.discordapp\.com|media\.discordapp\.net)/(?:embed/)?avatars/[\w./-]+(?:\?[^\s]*)?", u)]
+        if len(avatars) == 1:
+            return avatar_bytes(avatars[0])
+        if avatars:
+            break
+        if len(images) == 1:
+            # PrintWindow renders just Discord, including when another app covers it.
+            import win32gui
+            from PIL import ImageGrab
+            root = answer.top_level_parent()
+            bounds = images[0].rectangle()
+            if root.handle and 12 <= bounds.width() <= 512 and 12 <= bounds.height() <= 512:
+                try:
+                    frame = ImageGrab.grab(window=root.handle)
+                    left, top = win32gui.GetWindowRect(root.handle)[:2]
+                    box = (bounds.left-left, bounds.top-top, bounds.right-left, bounds.bottom-top)
+                    if 0 <= box[0] < box[2] <= frame.width and 0 <= box[1] < box[3] <= frame.height:
+                        crop = frame.crop(box)
+                        if any(low != high for low, high in crop.convert("RGB").getextrema()):
+                            buffer = BytesIO()
+                            crop.thumbnail((128, 128))
+                            crop.save(buffer, format="PNG")
+                            return buffer.getvalue()
+                except (OSError, TypeError):
+                    pass
+            break
+    return None
 
 
 def discord_call(press=None):
     if sys.platform != "win32":
         return None
+    import os
     import pythoncom
     import win32gui
     import win32process
     import psutil
+    if press == "openDiscord":
+        os.startfile("discord://discord.com/channels/@me")
+        return None
     pythoncom.CoInitialize()
     try:
         from pywinauto import Desktop
+        from pywinauto.uia_defines import get_elem_interface
         windows = []
         def collect(hwnd, _):
             if win32gui.IsWindowVisible(hwnd) and win32gui.GetClassName(hwnd) == "Chrome_WidgetWin_1":
@@ -68,27 +203,51 @@ def discord_call(press=None):
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     pass
         win32gui.EnumWindows(collect, None)
+        if press in ("toggleMute", "toggleDeafen"):
+            if windows:
+                window = Desktop(backend="uia").window(handle=windows[0])
+                window.set_focus()
+                if win32gui.GetForegroundWindow() == windows[0]:
+                    window.type_keys("^+m" if press == "toggleMute" else "^+d", set_foreground=False)
+            return None
+        controls, links, entries = [], {}, {}
         for hwnd in windows:
             window = Desktop(backend="uia").window(handle=hwnd).wrapper_object()
-            controls = window.descendants(control_type="Button") + window.descendants(control_type="CheckBox")
-            found = call_buttons(controls)
-            if not found:
-                continue
-            if press is not None:
-                if press in found:
-                    control = found[press]
-                    if control.element_info.control_type == "CheckBox":
-                        control.toggle()
-                    else:
-                        control.invoke()
-                return None
-            name = "Incoming Discord Call" if "answer" in found else "Discord Call"
-            page = DeckPage(id=CALL_ID, name=name, pageNumber=-4)
-            for index, key in enumerate(CALL_LABELS):
-                if key in found:
-                    page.tiles[index] = tile(CALL_ID, index, "discordControl", key, CALL_LABELS[key][0])
-            return page
-        return None
+            nodes = window.descendants()
+            server_ids = set()
+            for n in nodes:
+                if n.element_info.control_type in ("Tree", "Group", "List", "Pane", "Custom") and (n.element_info.name or "").casefold() in ("servers", "servers list"):
+                    server_ids.update(tuple(c.element_info.runtime_id or ()) for c in n.descendants() if c.element_info.control_type in ("TreeItem", "ListItem", "Hyperlink", "Button"))
+            for n in nodes:
+                info = n.element_info
+                if info.control_type in ("Button", "CheckBox"):
+                    controls.append(n)
+                if info.control_type not in ("TreeItem", "ListItem", "Hyperlink", "Button"):
+                    continue
+                value = legacy_value(n) if info.control_type == "Hyperlink" else ""
+                item = destination(info.name, info.automation_id or "", value, tuple(info.runtime_id or ()) in server_ids)
+                if item:
+                    key, entry = item
+                    entries.setdefault(key, entry)
+                    links.setdefault(key, n)
+        found = call_buttons(controls)
+        if press is not None:
+            control = links.get(press[4:]) if press.startswith("nav:") else found.get(press)
+            if control is not None:
+                if control.element_info.control_type == "CheckBox":
+                    control.toggle()
+                else:
+                    try:
+                        control.iface_invoke.Invoke()
+                    except uia_errors():
+                        get_elem_interface(control.element_info.element, "LegacyIAccessible").DoDefaultAction()
+            return None
+        if windows:
+            if not found.keys() & {"mute", "unmute"}:
+                found["toggleMute"] = True
+            if not found.keys() & {"deafen", "undeafen"}:
+                found["toggleDeafen"] = True
+        return discord_page(found, entries, caller_avatar(found["answer"], found["decline"]) if "answer" in found else None)
     finally:
         pythoncom.CoUninitialize()
 

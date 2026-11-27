@@ -377,6 +377,8 @@ final class DiscordControlManager: NSObject, ObservableObject {
 
     func execute(_ action: DiscordControlAction) {
         switch action {
+        case .sidebar(let key):
+            DiscordCalls.shared.pressSidebar(key)
         case .call(let button):
             DiscordCalls.shared.press(button)
         case .openChannel(let guildID, let channelID, _):

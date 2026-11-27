@@ -9,7 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from integrations import OBS, OBS_ID, CALL_ID, call_buttons, tile
+from integrations import OBS, OBS_ID, CALL_ID, call_buttons, destination, discord_page, tile
 from models import DeckPage
 from network import NetworkManager
 from page_store import PageStore
@@ -20,12 +20,36 @@ class IntegrationTests(unittest.TestCase):
         def buttons(*labels):
             return [SimpleNamespace(element_info=SimpleNamespace(name=name, control_type="Button"), is_enabled=lambda: True)
                     for name in labels]
-        self.assertEqual(call_buttons(buttons("Mute", "Accept")), {})
+        self.assertEqual(set(call_buttons(buttons("Mute", "Accept"))), {"mute"})
         self.assertEqual(set(call_buttons(buttons("Mute", "Turn On Video"))), {"mute", "cameraOn"})
         self.assertEqual(set(call_buttons(buttons("End Call\nCtrl+Shift+E"))), {"disconnect"})
         active = call_buttons(buttons("Disconnect", "Unmute (Ctrl+Shift+M)", "Turn Off Camera"))
         self.assertEqual(set(active), {"disconnect", "unmute", "cameraOff"})
-        self.assertEqual(set(call_buttons(buttons("Accept Call", "Decline", "Mute"))), {"answer", "decline"})
+        self.assertEqual(set(call_buttons(buttons("Accept Call", "Decline", "Mute"))), {"answer", "decline", "mute"})
+
+    def test_discord_layout_states_and_sidebar_order(self):
+        entries = dict(destination(f"Community {n}", f"guildsnav___{n}", "", True) for n in range(7))
+        idle = discord_page({}, entries)
+        self.assertEqual(idle.tiles[2].tileType.action, "openDiscord")
+        self.assertEqual([t.customLabel for t in idle.tiles[5:10]], [f"Community {n}" for n in range(5)])
+        key, info = destination("Casey, 12 unread messages", "", "/channels/@me/123", False)
+        entries[key] = info
+        self.assertEqual(info, ("Casey", True, True, "12"))
+        key, info = destination("Robotics, 3 mentions", "guildsnav___12", "", True)
+        entries[key] = info
+        self.assertEqual(info, ("Robotics", False, True, "3"))
+        before = discord_page(dict.fromkeys(("mute", "deafen", "disconnect", "cameraOn", "share")), entries)
+        after = discord_page(dict.fromkeys(("unmute", "undeafen", "disconnect", "cameraOff", "stopShare")), entries)
+        self.assertEqual([t.tileType.action for t in before.tiles[:5]], ["mute", "deafen", "disconnect", "cameraOn", "share"])
+        self.assertEqual([t.tileType.action for t in after.tiles[:5]], ["unmute", "undeafen", "disconnect", "cameraOff", "stopShare"])
+        for slot in (0, 1, 3, 4):
+            self.assertNotEqual(before.tiles[slot].iconData, after.tiles[slot].iconData)
+        self.assertEqual([t.customLabel for t in after.tiles[5:7]], ["Casey", "Robotics"])
+        self.assertIsNone(after.tiles[7])
+        self.assertIsNone(destination("not a sidebar link", "", "", False))
+        ringing = discord_page({"answer": True}, {})
+        self.assertEqual(ringing.tiles[2].tileType.action, "answer")
+        self.assertNotEqual(ringing.tiles[2].iconData, idle.tiles[2].iconData)
 
     def test_paired_android_controls_obs(self):
         from websockets import serve, connect

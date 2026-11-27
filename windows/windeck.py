@@ -400,8 +400,9 @@ class WinDeckApp:
             foreground = self.action_engine.foreground_executable()
             self.page_store.set_browser_active(foreground in BROWSERS)
             target = None
-            has_call = self.page_store.show_discord and CALL_ID in self.page_store.live_pages
-            if has_call and (foreground == "discord.exe" or not had_call):
+            discord = self.page_store.live_pages.get(CALL_ID) if self.page_store.show_discord else None
+            has_call = discord is not None and discord.name != "Discord"
+            if discord and (foreground == "discord.exe" or (has_call and not had_call)):
                 target = CALL_ID
             elif foreground in ("obs64.exe", "obs32.exe") and OBS_ID in self.page_store.live_pages:
                 target = OBS_ID

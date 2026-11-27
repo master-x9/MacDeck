@@ -12,7 +12,7 @@ The phone uses Bonjour/mDNS service `_macdeck._tcp` and WebSocket port 62233. Th
 
 ## Discord calls
 
-Enable **Discord Calls** and keep the Discord desktop window open. WinDeck reads the English accessibility labels on Discord's own buttons. An active call provides mute or unmute, camera on or off, and disconnect. An incoming call provides answer and decline when Discord exposes both buttons. Buttons follow the current call state. Discord's tray-only mode, language, and which call controls are visible can affect availability.
+Enable **Discord Calls** and keep the Discord desktop window open. WinDeck reads the English accessibility labels on Discord's own buttons. The top row shows microphone, deafen, call, camera and screen sharing in fixed positions. The call tile opens Discord, answers an incoming call, or disconnects. The second row shows up to five unread DMs and server mentions, falling back to visible joined servers in sidebar order. Counts and caller artwork depend on what Discord exposes. Choose the screen or window to share in Discord. Discord's tray-only mode, language, and which call controls are visible can affect availability.
 
 ## OBS Studio
 

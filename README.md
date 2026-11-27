@@ -16,11 +16,11 @@ The Android companion also pairs with the Windows host. The desktop hosts includ
 
 | Device | Download | Install |
 | --- | --- | --- |
-| Mac (Apple silicon, macOS 26.5+) | [Download MacDeck.dmg](https://github.com/master-x9/macDeckk/releases/download/2026.11.27/MacDeck.dmg) | Open the disk image, copy MacDeck to Applications, and launch it. Allow local network access if prompted. |
-| Windows x64 | [Download WinDeck for Windows x64](https://github.com/master-x9/macDeckk/releases/download/2026.11.27/WinDeck-Windows-x64.zip) | Extract the portable ZIP and open **WinDeck.exe**, or run the host from source. |
-| Android phone | [Download MacDeck.apk](https://github.com/master-x9/macDeckk/releases/download/2026.11.27/MacDeck.apk) | Open the APK from Downloads and tap **Install**. If Android prompts you, allow installation from the app that opened the file. You can switch that permission off afterward. |
+| Mac (Apple silicon, macOS 26.5+) | [Download MacDeck.dmg](https://github.com/master-x9/MacDeck/releases/latest/download/MacDeck.dmg) | Open the disk image, copy MacDeck to Applications, and launch it. Allow local network access if prompted. |
+| Windows x64 | [Download WinDeck for Windows x64](https://github.com/master-x9/MacDeck/releases/latest/download/WinDeck-Windows-x64.zip) | Extract the portable ZIP and open **WinDeck.exe**, or run the host from source. |
+| Android phone | [Download MacDeck.apk](https://github.com/master-x9/MacDeck/releases/latest/download/MacDeck.apk) | Open the APK from Downloads and tap **Install**. If Android prompts you, allow installation from the app that opened the file. You can switch that permission off afterward. |
 
-Install the Android app and the host for your computer, then follow [Pair your phone and try a tile](#pair-your-phone-and-try-a-tile). You can also find all downloads on the [GitHub release page](https://github.com/master-x9/macDeckk/releases/tag/2026.11.27).
+Install the Android app and the host for your computer, then follow [Pair your phone and try a tile](#pair-your-phone-and-try-a-tile). You can also find all downloads on the [GitHub release page](https://github.com/master-x9/MacDeck/releases/latest).
 
 ## What can go on a deck?
 
@@ -31,7 +31,7 @@ Install the Android app and the host for your computer, then follow [Pair your p
 | Browser controls | Move between tabs, go back or forward, refresh, or open a new tab while the browser is active. |
 | A running-apps page | See which apps are open and tap one to bring it forward. The page updates as the set of running apps changes. |
 
-The **macOS host** also supports app-triggered pages. For example, you can have your recording deck appear when OBS comes to the foreground. Its OBS integration builds tiles from your scene list and adds recording, streaming, replay buffer, and microphone controls. On either host, a Discord call page shows the available mute, camera and disconnect buttons. Keep an English-language Discord desktop window open. On macOS, grant MacDeck Accessibility permission under System Settings → Privacy & Security. Pinned channels on macOS use the optional bot connection. Mac lock and unlock remain exclusive to macOS.
+The **macOS host** also supports app-triggered pages. For example, you can have your recording deck appear when OBS comes to the foreground. Its OBS integration builds tiles from your scene list and adds recording, streaming, replay buffer, and microphone controls. On either host, the Discord page reserves five positions for microphone, deafen, call, camera and screen sharing. The call tile opens Discord while idle, answers an incoming call and disconnects an active call. The next five positions show visible unread DMs and server mentions with Discord’s counts, or the first visible servers in sidebar order. Caller artwork appears when Discord exposes it. Screen sharing opens Discord’s source picker. Keep an English-language Discord desktop window open. On macOS, grant MacDeck Accessibility permission under System Settings → Privacy & Security. Pinned channels on macOS use the optional bot connection. Mac lock and unlock remain exclusive to macOS.
 
 ## Pair your phone and try a tile
 
