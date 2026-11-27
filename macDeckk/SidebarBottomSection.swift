@@ -156,6 +156,12 @@ struct SidebarBottomSection: View {
             .buttonStyle(.plain)
             .padding(.horizontal, 4)
 
+            Link(destination: URL(string: "https://macdeck.fun/?support=1")!) {
+                Label("Support MacDeck", systemImage: "heart")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .padding(.horizontal, 4)
+
             // Trusted Devices Disclosure
             DisclosureGroup(isExpanded: $isTrustedExpanded) {
                 if trustStore.devices.isEmpty {

@@ -376,6 +376,7 @@ function setupEventListeners() {
     const tileType = website ? {type: "website", url: value, name: value} : {type: "shortcut", name: value};
     postApi("/api/set_tile", {pageId: appState.selectedPageId, slotIndex: selectedSlotIndex, tileType});
   };
+  document.getElementById("supportMacDeck").onclick = () => postApi("/api/support", {});
   const settings = document.getElementById("integrationSettings");
   const port = document.getElementById("obsPort");
   const password = document.getElementById("obsPassword");

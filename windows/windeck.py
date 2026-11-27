@@ -140,6 +140,9 @@ class WinDeckHttpServer(HTTPServer):
         ctx = self.ctx
         ps = ctx.page_store
 
+        if path == "/api/support":
+            return {"success": webbrowser.open("https://macdeck.fun/?support=1")}
+
         if path == "/api/select_page":
             if not any(p.id == body.get("pageId") for p in ps.all_pages):
                 return {"success": False, "error": "Page unavailable"}
