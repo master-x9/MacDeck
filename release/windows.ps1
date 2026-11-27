@@ -11,6 +11,6 @@ try {
     if ($LASTEXITCODE) { throw 'Windows lighting dependencies missing' }
     python -m PyInstaller --noconfirm --onedir --windowed --collect-submodules winrt --collect-all pywinauto --collect-all velopack --hidden-import websockets.asyncio.server --icon windeck.ico --add-data 'ui;ui' --name WinDeck windeck.py
     if ($LASTEXITCODE) { throw 'WinDeck build failed' }
-    vpk pack --packId WinDeck --packVersion $Version --packDir dist/WinDeck --mainExe WinDeck.exe --releaseNotes $notesPath --outputDir ../release/out/windows
+    vpk pack --runtime win-x64 --channel win --packId WinDeck --packVersion $Version --packDir dist/WinDeck --mainExe WinDeck.exe --releaseNotes $notesPath --outputDir ../release/out/windows
     if ($LASTEXITCODE) { throw 'Velopack packaging failed' }
 } finally { Pop-Location }
