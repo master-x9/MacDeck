@@ -9,7 +9,7 @@ on:
         description: Beta release notes
         required: true
 permissions:
-  contents: read
+  contents: write
 jobs:
   windows:
     runs-on: windows-latest
@@ -36,3 +36,23 @@ jobs:
           name: WinDeck-Windows-Beta
           path: release/out/windows/
           if-no-files-found: error
+      - name: Publish Windows prerelease
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          $tag = "windows-$env:RELEASE_VERSION"
+          $output = 'release/out/windows'
+          $setup = Get-ChildItem "$output/*Setup.exe" | Select-Object -First 1
+          if (-not $setup) { throw 'Windows installer is missing' }
+          Rename-Item $setup.FullName 'WinDeck-Setup.exe'
+          $assets = Get-ChildItem "$output/*" -File | Where-Object { $_.Name -match '(Setup\.exe|\.nupkg|releases.*\.json|Portable\.zip)$' }
+          $checksums = $assets | ForEach-Object { "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)" }
+          Set-Content -Path "$output/SHA256SUMS.txt" -Value $checksums -Encoding utf8
+          gh release create $tag --target $env:GITHUB_SHA --title "WinDeck $env:RELEASE_VERSION — Windows Beta" --notes-file notes.md --draft --prerelease
+          if ($LASTEXITCODE) { throw 'Could not create beta release' }
+          gh release upload $tag @($assets.FullName) "$output/SHA256SUMS.txt"
+          if ($LASTEXITCODE) { throw 'Could not upload beta assets' }
+          gh release edit $tag --draft=false --prerelease --latest=false
+          if ($LASTEXITCODE) { throw 'Could not publish beta release' }
